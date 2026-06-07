@@ -5,7 +5,7 @@ const supabase = require('../supabase');
 
 // GET /api/products
 router.get('/', auth, async (req, res) => {
-  const { data, error } = await supabase
+  var { data, error } = await supabase
     .from('products').select('*').eq('active', true).order('name');
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -13,9 +13,8 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/products
 router.post('/', auth, async (req, res) => {
-  if (!['admin'].includes(req.user.role))
-    return res.status(403).json({ error: 'Sin permisos' });
-  const { data, error } = await supabase
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+  var { data, error } = await supabase
     .from('products').insert(req.body).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
@@ -23,10 +22,9 @@ router.post('/', auth, async (req, res) => {
 
 // PUT /api/products/:id
 router.put('/:id', auth, async (req, res) => {
-  if (!['admin'].includes(req.user.role))
-    return res.status(403).json({ error: 'Sin permisos' });
-  const { data, error } = await supabase
-    .from('products').update({ ...req.body, updated_at: new Date() })
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+  var { data, error } = await supabase
+    .from('products').update(Object.assign({}, req.body, { updated_at: new Date() }))
     .eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -34,10 +32,9 @@ router.put('/:id', auth, async (req, res) => {
 
 // DELETE /api/products/:id (soft delete)
 router.delete('/:id', auth, async (req, res) => {
-  if (!['admin'].includes(req.user.role))
-    return res.status(403).json({ error: 'Sin permisos' });
-  const { error } = await supabase
-    .from('products').update({ active: false }).eq('id', req.params.id);
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+  var { error } = await supabase
+    .from('products').update({ active:false, updated_at:new Date() }).eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
