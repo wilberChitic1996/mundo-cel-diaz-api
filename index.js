@@ -14,9 +14,11 @@ app.use('/api/accounts',  require('./routes/accounts'));
 app.use('/api/returns',   require('./routes/returns'));
 app.use('/api/defectives',require('./routes/defectives'));
 app.use('/api/users',     require('./routes/users'));
+app.use('/api/clients',   require('./routes/clients'));
+app.use('/api/repairs',   require('./routes/repairs'));
 
 app.get('/health', function(req, res) {
-  res.json({ status:'ok', version:'1.1.0', system:'MUNDO CEL DIAZ API' });
+  res.json({ status:'ok', version:'1.2.0', system:'MUNDO CEL DIAZ API' });
 });
 
 app.use(function(req, res) { res.status(404).json({ error:'Ruta no encontrada' }); });
