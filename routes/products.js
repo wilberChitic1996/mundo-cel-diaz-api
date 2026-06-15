@@ -11,11 +11,18 @@ router.get('/', auth, async (req, res) => {
   res.json(data);
 });
 
-// POST /api/products
+// POST /api/products — genera código automático
 router.post('/', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+
+  // Obtener código automático desde Supabase
+  var { data: codeData, error: codeError } = await supabase.rpc('generate_product_code');
+  if (codeError) return res.status(500).json({ error: 'Error generando código: ' + codeError.message });
+
+  var productData = Object.assign({}, req.body, { code: codeData });
+
   var { data, error } = await supabase
-    .from('products').insert(req.body).select().single();
+    .from('products').insert(productData).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
 });
@@ -34,7 +41,8 @@ router.put('/:id', auth, async (req, res) => {
 router.delete('/:id', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
   var { error } = await supabase
-    .from('products').update({ active:false, updated_at:new Date() }).eq('id', req.params.id);
+    .from('products').update({ active: false, updated_at: new Date() })
+    .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
