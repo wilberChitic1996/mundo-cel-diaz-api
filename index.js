@@ -4,6 +4,10 @@ const cors    = require('cors');
 
 const app = express();
 
+// Railway corre detrás de un proxy: confiar en 1 hop para que el rate
+// limiter identifique la IP real del cliente (vía X-Forwarded-For).
+app.set('trust proxy', 1);
+
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 

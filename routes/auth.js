@@ -3,6 +3,7 @@ const router  = express.Router();
 const jwt     = require('jsonwebtoken');
 const crypto  = require('crypto');
 const supabase = require('../supabase');
+const { loginLimiter, recoveryLimiter } = require('../middleware/rateLimit');
 
 // Hash SHA-256 con salt (igual que el frontend)
 function hashPassword(password) {
@@ -18,7 +19,7 @@ function hashAnswer(answer) {
 }
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password)
     return res.status(400).json({ error: 'Email y contraseña requeridos' });
@@ -69,7 +70,7 @@ router.get('/me', require('../middleware/auth'), (req, res) => {
    ══════════════════════════════════════════════════════════════════ */
 
 // POST /api/auth/find-user  -> devuelve la pregunta de seguridad del usuario
-router.post('/find-user', async (req, res) => {
+router.post('/find-user', recoveryLimiter, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email requerido' });
 
@@ -90,7 +91,7 @@ router.post('/find-user', async (req, res) => {
 });
 
 // POST /api/auth/verify-answer  -> valida la respuesta (sin cambiar nada)
-router.post('/verify-answer', async (req, res) => {
+router.post('/verify-answer', recoveryLimiter, async (req, res) => {
   const { email, answer } = req.body;
   if (!email || !answer) return res.status(400).json({ error: 'Email y respuesta requeridos' });
 
@@ -113,7 +114,7 @@ router.post('/verify-answer', async (req, res) => {
 });
 
 // POST /api/auth/reset-password  -> re-valida la respuesta y cambia la contraseña
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', recoveryLimiter, async (req, res) => {
   const { email, answer, newPassword } = req.body;
   if (!email || !answer || !newPassword)
     return res.status(400).json({ error: 'Datos incompletos' });
