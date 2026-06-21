@@ -16,9 +16,10 @@ router.get('/', auth, async (req, res) => {
 // POST /api/accounts
 router.post('/', auth, async (req, res) => {
   var { client, total, paid, balance, status, method, items } = req.body;
+  var registradoPor = { name: req.user.name, role: req.user.role };
   var { data: acc, error } = await supabase
     .from('accounts')
-    .insert({ client, total, paid:paid||0, balance:balance||total, status:status||'pendiente', method:method||'Efectivo', user_id:req.user.userId })
+    .insert({ client, total, paid:paid||0, balance:balance||total, status:status||'pendiente', method:method||'Efectivo', user_id:req.user.userId, registrado_por: registradoPor })
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   if (items && items.length) {
@@ -32,10 +33,11 @@ router.post('/', auth, async (req, res) => {
 // POST /api/accounts/:id/payments
 router.post('/:id/payments', auth, async (req, res) => {
   var { amount, method, note } = req.body;
+  var registradoPor = { name: req.user.name, role: req.user.role };
 
   var { data: pmt, error: pErr } = await supabase
     .from('account_payments')
-    .insert({ account_id:req.params.id, amount, method:method||'Efectivo', note:note||'' })
+    .insert({ account_id:req.params.id, amount, method:method||'Efectivo', note:note||'', registrado_por: registradoPor })
     .select().single();
   if (pErr) return res.status(500).json({ error: pErr.message });
 

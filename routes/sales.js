@@ -18,13 +18,16 @@ router.post('/', auth, async (req, res) => {
   if (!client || !items || !items.length)
     return res.status(400).json({ error: 'Datos incompletos' });
 
+  // Quien registra la operacion (tomado del token de sesion)
+  var registradoPor = { name: req.user.name, role: req.user.role };
+
   payType = payType || 'completo';
 
   if (payType === 'completo') {
     // Venta normal
     var { data: sale, error: sErr } = await supabase
       .from('sales')
-      .insert({ client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId })
+      .insert({ client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor })
       .select().single();
     if (sErr) return res.status(500).json({ error: sErr.message });
 
@@ -51,7 +54,7 @@ router.post('/', auth, async (req, res) => {
 
     var { data: acc, error: aErr } = await supabase
       .from('accounts')
-      .insert({ client, total, paid, balance, status, method: method||'Efectivo', user_id: req.user.userId })
+      .insert({ client, total, paid, balance, status, method: method||'Efectivo', user_id: req.user.userId, registrado_por: registradoPor })
       .select().single();
     if (aErr) return res.status(500).json({ error: aErr.message });
 
@@ -61,7 +64,7 @@ router.post('/', auth, async (req, res) => {
 
     if (paid > 0) {
       await supabase.from('account_payments').insert({
-        account_id: acc.id, amount: paid, method: method||'Efectivo', note: 'Abono inicial'
+        account_id: acc.id, amount: paid, method: method||'Efectivo', note: 'Abono inicial', registrado_por: registradoPor
       });
     }
 
