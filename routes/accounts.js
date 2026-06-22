@@ -1,7 +1,8 @@
-const express  = require('express');
-const router   = express.Router();
-const auth     = require('../middleware/auth');
-const supabase = require('../supabase');
+const express   = require('express');
+const router    = express.Router();
+const auth      = require('../middleware/auth');
+const supabase  = require('../supabase');
+const logAudit  = require('../utils/audit');
 
 // GET /api/accounts
 router.get('/', auth, async (req, res) => {
@@ -27,6 +28,7 @@ router.post('/', auth, async (req, res) => {
       items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty }; })
     );
   }
+  await logAudit(req.user, 'cuenta_creada', 'account', acc.id, { client, total });
   res.status(201).json(acc);
 });
 
@@ -52,6 +54,7 @@ router.post('/:id/payments', auth, async (req, res) => {
     .update({ paid:totalPaid, balance:newBalance, status:newStatus, updated_at:new Date() })
     .eq('id', req.params.id);
 
+  await logAudit(req.user, 'abono_registrado', 'account', req.params.id, { amount, method: method||'Efectivo', note, newBalance, newStatus });
   res.status(201).json(pmt);
 });
 
