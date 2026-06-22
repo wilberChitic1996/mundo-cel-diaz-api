@@ -23,29 +23,25 @@ router.post('/', auth, async (req, res) => {
 
   payType = payType || 'completo';
 
-  // Validar stock disponible ANTES de registrar la venta
-  for (var check of items) {
-    if (check.id && check.unit !== 'serv') {
-      var { data: stockCheck } = await supabase.from('products').select('name,stock').eq('id', check.id).single();
-      if (stockCheck && stockCheck.stock < check.qty) {
-        return res.status(400).json({
-          error: 'Stock insuficiente: "' + stockCheck.name + '" tiene ' + stockCheck.stock + ' unidad(es) y se intenta vender ' + check.qty
-        });
-      }
-    }
-  }
-
-  // Validar límite de descuento por rol (cajero: max 20%)
+  // Validar stock y descuento contra precios reales en BD
   var DISCOUNT_LIMIT = { cajero: 0.20 };
   var userRole = req.user.role;
-  if (DISCOUNT_LIMIT[userRole] !== undefined) {
-    for (var di of items) {
-      if (di.originalPrice && di.price < di.originalPrice) {
-        var pct = (di.originalPrice - di.price) / di.originalPrice;
-        if (pct > DISCOUNT_LIMIT[userRole]) {
-          return res.status(403).json({
-            error: 'Descuento no autorizado: el rol "' + userRole + '" tiene un límite de ' + (DISCOUNT_LIMIT[userRole] * 100) + '% en "' + di.name + '"'
+  for (var check of items) {
+    if (check.id && check.unit !== 'serv') {
+      var { data: dbProd } = await supabase.from('products').select('name,stock,price').eq('id', check.id).single();
+      if (dbProd) {
+        if (dbProd.stock < check.qty) {
+          return res.status(400).json({
+            error: 'Stock insuficiente: "' + dbProd.name + '" tiene ' + dbProd.stock + ' unidad(es) y se intenta vender ' + check.qty
           });
+        }
+        if (DISCOUNT_LIMIT[userRole] !== undefined && dbProd.price > 0 && check.price < dbProd.price) {
+          var pct = (dbProd.price - check.price) / dbProd.price;
+          if (pct > DISCOUNT_LIMIT[userRole]) {
+            return res.status(403).json({
+              error: 'Descuento no autorizado: el rol "' + userRole + '" tiene un límite de ' + (DISCOUNT_LIMIT[userRole] * 100) + '% en "' + dbProd.name + '" (precio catálogo: Q' + dbProd.price.toFixed(2) + ', precio cobrado: Q' + Number(check.price).toFixed(2) + ')'
+            });
+          }
         }
       }
     }
