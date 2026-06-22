@@ -23,6 +23,34 @@ router.post('/', auth, async (req, res) => {
 
   payType = payType || 'completo';
 
+  // Validar stock disponible ANTES de registrar la venta
+  for (var check of items) {
+    if (check.id && check.unit !== 'serv') {
+      var { data: stockCheck } = await supabase.from('products').select('name,stock').eq('id', check.id).single();
+      if (stockCheck && stockCheck.stock < check.qty) {
+        return res.status(400).json({
+          error: 'Stock insuficiente: "' + stockCheck.name + '" tiene ' + stockCheck.stock + ' unidad(es) y se intenta vender ' + check.qty
+        });
+      }
+    }
+  }
+
+  // Validar límite de descuento por rol (cajero: max 20%)
+  var DISCOUNT_LIMIT = { cajero: 0.20 };
+  var userRole = req.user.role;
+  if (DISCOUNT_LIMIT[userRole] !== undefined) {
+    for (var di of items) {
+      if (di.originalPrice && di.price < di.originalPrice) {
+        var pct = (di.originalPrice - di.price) / di.originalPrice;
+        if (pct > DISCOUNT_LIMIT[userRole]) {
+          return res.status(403).json({
+            error: 'Descuento no autorizado: el rol "' + userRole + '" tiene un límite de ' + (DISCOUNT_LIMIT[userRole] * 100) + '% en "' + di.name + '"'
+          });
+        }
+      }
+    }
+  }
+
   if (payType === 'completo') {
     // Venta normal
     var { data: sale, error: sErr } = await supabase
