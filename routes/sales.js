@@ -1,7 +1,8 @@
-const express  = require('express');
-const router   = express.Router();
-const auth     = require('../middleware/auth');
-const supabase = require('../supabase');
+const express   = require('express');
+const router    = express.Router();
+const auth      = require('../middleware/auth');
+const supabase  = require('../supabase');
+const logAudit  = require('../utils/audit');
 
 // GET /api/sales
 router.get('/', auth, async (req, res) => {
@@ -14,14 +15,24 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/sales — maneja completo, parcial y pendiente
 router.post('/', auth, async (req, res) => {
-  var { client, total, method, items, payType, initialPay } = req.body;
+  var { client, total, method, items, payType, initialPay, idempotencyKey } = req.body;
   if (!client || !items || !items.length)
     return res.status(400).json({ error: 'Datos incompletos' });
 
-  // Quien registra la operacion (tomado del token de sesion)
   var registradoPor = { name: req.user.name, role: req.user.role };
-
   payType = payType || 'completo';
+
+  // Idempotency check para ventas completas
+  if (idempotencyKey && payType === 'completo') {
+    var { data: existing } = await supabase.from('sales').select('id').eq('idempotency_key', idempotencyKey).maybeSingle();
+    if (existing) return res.status(200).json(existing);
+  }
+
+  // Idempotency check para cuentas por cobrar
+  if (idempotencyKey && payType !== 'completo') {
+    var { data: existingAcc } = await supabase.from('accounts').select('id').eq('idempotency_key', idempotencyKey).maybeSingle();
+    if (existingAcc) return res.status(200).json(Object.assign({ type: 'account' }, existingAcc));
+  }
 
   // Validar stock y descuento contra precios reales en BD
   var DISCOUNT_LIMIT = { cajero: 0.20 };
@@ -48,11 +59,11 @@ router.post('/', auth, async (req, res) => {
   }
 
   if (payType === 'completo') {
-    // Venta normal
+    var insertData = { client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor };
+    if (idempotencyKey) insertData.idempotency_key = idempotencyKey;
+
     var { data: sale, error: sErr } = await supabase
-      .from('sales')
-      .insert({ client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor })
-      .select().single();
+      .from('sales').insert(insertData).select().single();
     if (sErr) { console.error('[SALES]', sErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
     await supabase.from('sale_items').insert(
@@ -68,18 +79,20 @@ router.post('/', auth, async (req, res) => {
         }
       }
     }
+
+    await logAudit(req.user, 'venta_completada', 'sale', sale.id, { client, total, method: method||'Efectivo', items: items.length });
     return res.status(201).json(sale);
 
   } else {
-    // Parcial o pendiente: crear cuenta por cobrar
     var paid    = payType === 'parcial' ? Math.min(parseFloat(initialPay)||0, total) : 0;
     var balance = total - paid;
     var status  = balance <= 0 ? 'pagado' : paid > 0 ? 'parcial' : 'pendiente';
 
+    var accInsert = { client, total, paid, balance, status, method: method||'Efectivo', user_id: req.user.userId, registrado_por: registradoPor };
+    if (idempotencyKey) accInsert.idempotency_key = idempotencyKey;
+
     var { data: acc, error: aErr } = await supabase
-      .from('accounts')
-      .insert({ client, total, paid, balance, status, method: method||'Efectivo', user_id: req.user.userId, registrado_por: registradoPor })
-      .select().single();
+      .from('accounts').insert(accInsert).select().single();
     if (aErr) { console.error('[SALES]', aErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
     await supabase.from('account_items').insert(
@@ -102,6 +115,7 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
+    await logAudit(req.user, 'cuenta_creada', 'account', acc.id, { client, total, paid, payType });
     return res.status(201).json({ type:'account', ...acc });
   }
 });

@@ -1,7 +1,8 @@
-const express  = require('express');
-const router   = express.Router();
-const auth     = require('../middleware/auth');
-const supabase = require('../supabase');
+const express   = require('express');
+const router    = express.Router();
+const auth      = require('../middleware/auth');
+const supabase  = require('../supabase');
+const logAudit  = require('../utils/audit');
 
 // GET /api/products
 router.get('/', auth, async (req, res) => {
@@ -24,6 +25,7 @@ router.post('/', auth, async (req, res) => {
   var { data, error } = await supabase
     .from('products').insert(productData).select().single();
   if (error) { console.error('[PRODUCTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  await logAudit(req.user, 'producto_creado', 'product', data.id, { name: data.name, code: data.code, price: data.price, stock: data.stock });
   res.status(201).json(data);
 });
 
@@ -34,6 +36,7 @@ router.put('/:id', auth, async (req, res) => {
     .from('products').update(Object.assign({}, req.body, { updated_at: new Date() }))
     .eq('id', req.params.id).select().single();
   if (error) { console.error('[PRODUCTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  await logAudit(req.user, 'producto_editado', 'product', req.params.id, req.body);
   res.json(data);
 });
 
@@ -44,6 +47,7 @@ router.delete('/:id', auth, async (req, res) => {
     .from('products').update({ active: false, updated_at: new Date() })
     .eq('id', req.params.id);
   if (error) { console.error('[PRODUCTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  await logAudit(req.user, 'producto_eliminado', 'product', req.params.id, {});
   res.json({ success: true });
 });
 

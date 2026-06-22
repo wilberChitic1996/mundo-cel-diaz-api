@@ -1,9 +1,10 @@
-const express  = require('express');
-const router   = express.Router();
-const auth     = require('../middleware/auth');
-const crypto   = require('crypto');
-const bcrypt   = require('bcryptjs');
-const supabase = require('../supabase');
+const express   = require('express');
+const router    = express.Router();
+const auth      = require('../middleware/auth');
+const crypto    = require('crypto');
+const bcrypt    = require('bcryptjs');
+const supabase  = require('../supabase');
+const logAudit  = require('../utils/audit');
 
 async function hashPassword(password) {
   return bcrypt.hash(password, 10);
@@ -45,6 +46,7 @@ router.post('/', auth, async (req, res) => {
     .insert(row)
     .select('id,name,email,role,active,sec_question').single();
   if (error) { console.error('[USERS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  await logAudit(req.user, 'usuario_creado', 'user', data.id, { name: data.name, email: data.email, role: data.role });
   res.status(201).json(data);
 });
 
@@ -75,6 +77,7 @@ router.put('/:id', auth, async (req, res) => {
     .eq('id', req.params.id)
     .select('id,name,email,role,active,sec_question').single();
   if (error) { console.error('[USERS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  await logAudit(req.user, 'usuario_editado', 'user', req.params.id, { name: b.name, email: b.email, role: b.role, active: b.active });
   res.json(data);
 });
 
