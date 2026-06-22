@@ -32,11 +32,28 @@ router.post('/', auth, async (req, res) => {
 // PUT /api/products/:id
 router.put('/:id', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+
+  // Leer estado anterior para generar diff
+  var { data: before } = await supabase.from('products').select('*').eq('id', req.params.id).single();
+
   var { data, error } = await supabase
     .from('products').update(Object.assign({}, req.body, { updated_at: new Date() }))
     .eq('id', req.params.id).select().single();
   if (error) { console.error('[PRODUCTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
-  await logAudit(req.user, 'producto_editado', 'product', req.params.id, req.body);
+
+  // Construir diff: solo campos que cambiaron
+  var CAMPOS = { name:'Nombre', code:'Código', price:'Precio', cost:'Costo', stock:'Stock', category:'Categoría', shelf:'Ubicación', unit:'Unidad', min_stock:'Stock mínimo' };
+  var diff = {};
+  if (before) {
+    Object.keys(CAMPOS).forEach(function(k){
+      if (req.body[k] !== undefined && String(req.body[k]) !== String(before[k])) {
+        diff[CAMPOS[k]] = { antes: before[k], despues: req.body[k] };
+      }
+    });
+  }
+  diff._producto = before ? before.name : req.params.id;
+
+  await logAudit(req.user, 'producto_editado', 'product', req.params.id, diff);
   res.json(data);
 });
 

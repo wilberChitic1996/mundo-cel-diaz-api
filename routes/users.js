@@ -71,13 +71,30 @@ router.put('/:id', auth, async (req, res) => {
   // respuesta de seguridad: llega en texto plano y se hashea (si viene vacía, no se cambia)
   if (b.secAnswer) updates.sec_answer_hash = hashAnswer(b.secAnswer);
 
+  // Leer estado anterior para diff
+  var { data: before } = await supabase.from('users').select('id,name,email,role,active').eq('id', req.params.id).single();
+
   const { data, error } = await supabase
     .from('users')
     .update(updates)
     .eq('id', req.params.id)
     .select('id,name,email,role,active,sec_question').single();
   if (error) { console.error('[USERS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
-  await logAudit(req.user, 'usuario_editado', 'user', req.params.id, { name: b.name, email: b.email, role: b.role, active: b.active });
+
+  var CAMPOS_U = { name:'Nombre', email:'Email', role:'Rol', active:'Activo' };
+  var diff = {};
+  if (before) {
+    Object.keys(CAMPOS_U).forEach(function(k){
+      if (b[k] !== undefined && String(b[k]) !== String(before[k])) {
+        diff[CAMPOS_U[k]] = { antes: before[k], despues: b[k] };
+      }
+    });
+  }
+  if (b.password) diff['Contraseña'] = { antes: '••••••', despues: '(cambiada)' };
+  if (b.secQuestion !== undefined) diff['Pregunta seguridad'] = { antes: before ? (before.sec_question||'—') : '—', despues: b.secQuestion||'—' };
+  diff._usuario = before ? before.name : req.params.id;
+
+  await logAudit(req.user, 'usuario_editado', 'user', req.params.id, diff);
   res.json(data);
 });
 
