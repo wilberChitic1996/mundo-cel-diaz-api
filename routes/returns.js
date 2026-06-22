@@ -15,12 +15,12 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/returns
 router.post('/', auth, async (req, res) => {
-  const { client, reason, refundMethod, refundAmount, itemCondition, items } = req.body;
+  const { client, saleId, reason, refundMethod, refundAmount, itemCondition, items } = req.body;
   const total = (items||[]).reduce(function(s,i){return s+i.price*i.qty;},0);
 
   const { data: ret, error } = await supabase
     .from('returns')
-    .insert({ client, reason,
+    .insert({ client, sale_id: saleId||null, reason,
       refund_method: refundMethod,
       refund_amount: refundAmount||0,
       item_condition: itemCondition||'bueno',
