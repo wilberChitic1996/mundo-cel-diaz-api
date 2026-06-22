@@ -57,6 +57,32 @@ router.put('/:id', auth, async (req, res) => {
   res.json(data);
 });
 
+// GET /api/products/:id/price-history — historial de cambios de precio desde audit_logs
+router.get('/:id/price-history', auth, async (req, res) => {
+  var { data, error } = await supabase
+    .from('audit_logs')
+    .select('created_at, user_name, user_role, details')
+    .eq('entity_type', 'product')
+    .eq('entity_id', req.params.id)
+    .eq('action', 'producto_editado')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) { console.error('[PRICE-HISTORY]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  // Filtrar solo registros que incluyan cambio de Precio
+  var history = (data || [])
+    .filter(function(r) { return r.details && r.details['Precio']; })
+    .map(function(r) {
+      return {
+        date: r.created_at,
+        user: r.user_name,
+        role: r.user_role,
+        before: r.details['Precio'].antes,
+        after:  r.details['Precio'].despues,
+      };
+    });
+  res.json(history);
+});
+
 // DELETE /api/products/:id (soft delete)
 router.delete('/:id', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
