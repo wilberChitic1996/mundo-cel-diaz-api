@@ -60,11 +60,12 @@ router.put('/:id', auth, async (req, res) => {
 // DELETE /api/products/:id (soft delete)
 router.delete('/:id', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+  var { data: before } = await supabase.from('products').select('name,code').eq('id', req.params.id).single();
   var { error } = await supabase
     .from('products').update({ active: false, updated_at: new Date() })
     .eq('id', req.params.id);
   if (error) { console.error('[PRODUCTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
-  await logAudit(req.user, 'producto_eliminado', 'product', req.params.id, {});
+  await logAudit(req.user, 'producto_eliminado', 'product', req.params.id, { nombre: before ? before.name : '—', codigo: before ? before.code : '—' });
   res.json({ success: true });
 });
 

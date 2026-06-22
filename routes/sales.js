@@ -80,7 +80,10 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
-    await logAudit(req.user, 'venta_completada', 'sale', sale.id, { client, total, method: method||'Efectivo', items: items.length });
+    await logAudit(req.user, 'venta_completada', 'sale', sale.id, {
+      cliente: client, total, metodo: method||'Efectivo',
+      articulos: items.map(function(i){ return i.name+' x'+i.qty; }).join(', ')
+    });
     return res.status(201).json(sale);
 
   } else {
@@ -115,7 +118,10 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
-    await logAudit(req.user, 'cuenta_creada', 'account', acc.id, { client, total, paid, payType });
+    await logAudit(req.user, 'cuenta_creada', 'account', acc.id, {
+      cliente: client, total, abono_inicial: paid, tipo: payType,
+      articulos: items.map(function(i){ return i.name+' x'+i.qty; }).join(', ')
+    });
     return res.status(201).json({ type:'account', ...acc });
   }
 });

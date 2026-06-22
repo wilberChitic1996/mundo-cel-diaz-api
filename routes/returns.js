@@ -2,6 +2,7 @@ const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
+const logAudit = require('../utils/audit');
 
 // GET /api/returns
 router.get('/', auth, async (req, res) => {
@@ -27,16 +28,13 @@ router.post('/', auth, async (req, res) => {
     .select().single();
   if (error) { console.error('[RETURNS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
 
-  // Insertar items
   if (items && items.length) {
     await supabase.from('return_items').insert(
       items.map(function(i){ return { return_id:ret.id, code:i.code, name:i.name, price:i.price, qty:i.qty }; })
     );
   }
 
-  // Manejar stock segun condicion del articulo
   if (itemCondition === 'bueno') {
-    // Buen estado: devolver al inventario
     for (var item of items) {
       var { data: prod } = await supabase.from('products').select('stock').eq('code', item.code).single();
       if (prod) {
@@ -44,11 +42,19 @@ router.post('/', auth, async (req, res) => {
       }
     }
   } else {
-    // Defectuoso: agregar a piezas defectuosas
     var defItems = items.map(function(i){ return { return_id:ret.id, code:i.code, name:i.name, qty:i.qty, price:i.price, reason:reason, status:'defectuoso' }; });
     await supabase.from('defectives').insert(defItems);
   }
 
+  await logAudit(req.user, 'devolucion_registrada', 'return', ret.id, {
+    cliente: client,
+    motivo: reason,
+    condicion: itemCondition||'bueno',
+    reembolso_metodo: refundMethod||'—',
+    reembolso_monto: refundAmount||0,
+    total,
+    articulos: (items||[]).map(function(i){ return i.name+' x'+i.qty; }).join(', ')
+  });
   res.status(201).json(ret);
 });
 
