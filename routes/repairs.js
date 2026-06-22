@@ -7,7 +7,7 @@ const supabase = require('../supabase');
 router.get('/', auth, async (req, res) => {
   var { data, error } = await supabase
     .from('repairs').select('*').order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[REPAIRS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data || []);
 });
 
@@ -28,7 +28,7 @@ router.post('/', auth, async (req, res) => {
       created_at: b.createdAt||new Date().toISOString()
     }])
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[REPAIRS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.status(201).json(data);
 });
 
@@ -39,7 +39,7 @@ router.put('/:id/status', auth, async (req, res) => {
     .from('repairs')
     .update({ status, updated_at: new Date() })
     .eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[REPAIRS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -58,14 +58,14 @@ router.put('/:id', auth, async (req, res) => {
       status: b.status, parts: b.parts||[], updated_at: new Date()
     })
     .eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[REPAIRS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
 // DELETE /api/repairs/:id
 router.delete('/:id', auth, async (req, res) => {
   var { error } = await supabase.from('repairs').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[REPAIRS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json({ success: true });
 });
 

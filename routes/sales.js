@@ -8,7 +8,7 @@ router.get('/', auth, async (req, res) => {
   var { data, error } = await supabase
     .from('sales').select('*, sale_items(*)')
     .order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[SALES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -29,7 +29,7 @@ router.post('/', auth, async (req, res) => {
       .from('sales')
       .insert({ client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor })
       .select().single();
-    if (sErr) return res.status(500).json({ error: sErr.message });
+    if (sErr) { console.error('[SALES]', sErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
     await supabase.from('sale_items').insert(
       items.map(function(i){ return { sale_id:sale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty }; })
@@ -56,7 +56,7 @@ router.post('/', auth, async (req, res) => {
       .from('accounts')
       .insert({ client, total, paid, balance, status, method: method||'Efectivo', user_id: req.user.userId, registrado_por: registradoPor })
       .select().single();
-    if (aErr) return res.status(500).json({ error: aErr.message });
+    if (aErr) { console.error('[SALES]', aErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
     await supabase.from('account_items').insert(
       items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty }; })

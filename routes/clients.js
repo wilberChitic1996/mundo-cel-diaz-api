@@ -7,7 +7,7 @@ const supabase = require('../supabase');
 router.get('/', auth, async (req, res) => {
   var { data, error } = await supabase
     .from('clients').select('*').order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data || []);
 });
 
@@ -18,7 +18,7 @@ router.post('/', auth, async (req, res) => {
     .from('clients')
     .insert([{ id, cli_code: cliCode, name, dpi: dpi||null, phone: phone||null, address: address||null, active: active!==false, created_at: createdAt||new Date().toISOString() }])
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.status(201).json(data);
 });
 
@@ -29,7 +29,7 @@ router.put('/:id', auth, async (req, res) => {
     .from('clients')
     .update({ cli_code: cliCode, name, dpi: dpi||null, phone: phone||null, address: address||null, active: active!==false, updated_at: new Date() })
     .eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -37,7 +37,7 @@ router.put('/:id', auth, async (req, res) => {
 router.delete('/:id', auth, async (req, res) => {
   var { error } = await supabase
     .from('clients').update({ active: false, updated_at: new Date() }).eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json({ success: true });
 });
 

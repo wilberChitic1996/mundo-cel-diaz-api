@@ -8,8 +8,14 @@ const app = express();
 // limiter identifique la IP real del cliente (vía X-Forwarded-For).
 app.set('trust proxy', 1);
 
-app.use(cors({ origin: '*' }));
-app.use(express.json());
+var allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(function(u) { return u.trim(); })
+  : ['*'];
+app.use(cors({
+  origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
+  credentials: true
+}));
+app.use(express.json({ limit: '10kb' }));
 
 app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/products',  require('./routes/products'));
@@ -26,6 +32,11 @@ app.get('/health', function(req, res) {
 });
 
 app.use(function(req, res) { res.status(404).json({ error:'Ruta no encontrada' }); });
+
+app.use(function(err, req, res, _next) {
+  console.error('[ERROR]', new Date().toISOString(), req.method, req.originalUrl, err.message);
+  res.status(500).json({ error: 'Error interno del servidor' });
+});
 
 var PORT = process.env.PORT || 4000;
 app.listen(PORT, function() {
