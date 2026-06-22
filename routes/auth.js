@@ -1,21 +1,28 @@
-const express = require('express');
-const router  = express.Router();
-const jwt     = require('jsonwebtoken');
-const crypto  = require('crypto');
+const express  = require('express');
+const router   = express.Router();
+const jwt      = require('jsonwebtoken');
+const crypto   = require('crypto');
+const bcrypt   = require('bcryptjs');
 const supabase = require('../supabase');
 const { loginLimiter, recoveryLimiter } = require('../middleware/rateLimit');
 
-// Hash SHA-256 con salt (igual que el frontend)
-function hashPassword(password) {
-  return crypto
-    .createHash('sha256')
-    .update(password + 'mnpos_salt_2026')
-    .digest('hex');
+function legacySha256(password) {
+  return crypto.createHash('sha256').update(password + 'mnpos_salt_2026').digest('hex');
 }
 
-// Hashea la respuesta de seguridad con la MISMA normalización que el frontend
+async function hashPassword(password) {
+  return bcrypt.hash(password, 10);
+}
+
+async function verifyPassword(password, storedHash) {
+  if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$')) {
+    return bcrypt.compare(password, storedHash);
+  }
+  return legacySha256(password) === storedHash;
+}
+
 function hashAnswer(answer) {
-  return hashPassword(String(answer).trim().toLowerCase());
+  return legacySha256(String(answer).trim().toLowerCase());
 }
 
 // POST /api/auth/login
@@ -35,16 +42,17 @@ router.post('/login', loginLimiter, async (req, res) => {
     return res.status(401).json({ error: 'Credenciales incorrectas' });
 
   const user = users[0];
-  const hash = hashPassword(password);
+  const valid = await verifyPassword(password, user.password_hash);
 
-  if (hash !== user.password_hash)
+  if (!valid)
     return res.status(401).json({ error: 'Credenciales incorrectas' });
 
-  // Actualizar lastLogin
-  await supabase
-    .from('users')
-    .update({ last_login: new Date().toISOString() })
-    .eq('id', user.id);
+  // Auto-migrar hash SHA-256 a bcrypt en login exitoso
+  var updateFields = { last_login: new Date().toISOString() };
+  if (!user.password_hash.startsWith('$2a$') && !user.password_hash.startsWith('$2b$')) {
+    updateFields.password_hash = await hashPassword(password);
+  }
+  await supabase.from('users').update(updateFields).eq('id', user.id);
 
   const token = jwt.sign(
     { userId: user.id, name: user.name, email: user.email, role: user.role },
@@ -80,7 +88,7 @@ router.post('/find-user', recoveryLimiter, async (req, res) => {
     .eq('email', email.toLowerCase().trim())
     .limit(1);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[FIND-USER]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   if (!users || users.length === 0 || !users[0].active)
     return res.status(404).json({ error: 'No se encontró una cuenta activa con ese email' });
 
@@ -101,7 +109,7 @@ router.post('/verify-answer', recoveryLimiter, async (req, res) => {
     .eq('email', email.toLowerCase().trim())
     .limit(1);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[VERIFY-ANSWER]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   if (!users || users.length === 0 || !users[0].active)
     return res.status(404).json({ error: 'Cuenta no encontrada' });
   if (!users[0].sec_answer_hash)
@@ -127,7 +135,7 @@ router.post('/reset-password', recoveryLimiter, async (req, res) => {
     .eq('email', email.toLowerCase().trim())
     .limit(1);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[RESET-PASSWORD]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   if (!users || users.length === 0 || !users[0].active)
     return res.status(404).json({ error: 'Cuenta no encontrada' });
 
@@ -135,12 +143,16 @@ router.post('/reset-password', recoveryLimiter, async (req, res) => {
   if (!user.sec_answer_hash || hashAnswer(answer) !== user.sec_answer_hash)
     return res.status(401).json({ error: 'Respuesta de seguridad incorrecta' });
 
+  const newHash = await hashPassword(newPassword);
   const { error: updErr } = await supabase
     .from('users')
-    .update({ password_hash: hashPassword(newPassword), updated_at: new Date() })
+    .update({ password_hash: newHash, updated_at: new Date() })
     .eq('id', user.id);
 
-  if (updErr) return res.status(500).json({ error: updErr.message });
+  if (updErr) {
+    console.error('[RESET-PASSWORD]', updErr.message);
+    return res.status(500).json({ error: 'Error al actualizar la contraseña' });
+  }
 
   res.json({ ok: true });
 });

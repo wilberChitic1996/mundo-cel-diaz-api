@@ -7,7 +7,7 @@ const supabase = require('../supabase');
 router.get('/', auth, async (req, res) => {
   const { data, error } = await supabase
     .from('defectives').select('*').order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[DEFECTIVES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -30,7 +30,7 @@ router.put('/:id', auth, async (req, res) => {
   var { data, error } = await supabase
     .from('defectives').update({ status: status, updated_at: new Date() })
     .eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[DEFECTIVES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 

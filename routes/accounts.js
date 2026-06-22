@@ -9,7 +9,7 @@ router.get('/', auth, async (req, res) => {
     .from('accounts')
     .select('*, account_items(*), account_payments(*)')
     .order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[ACCOUNTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -21,7 +21,7 @@ router.post('/', auth, async (req, res) => {
     .from('accounts')
     .insert({ client, total, paid:paid||0, balance:balance||total, status:status||'pendiente', method:method||'Efectivo', user_id:req.user.userId, registrado_por: registradoPor })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[ACCOUNTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   if (items && items.length) {
     await supabase.from('account_items').insert(
       items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty }; })
@@ -39,7 +39,7 @@ router.post('/:id/payments', auth, async (req, res) => {
     .from('account_payments')
     .insert({ account_id:req.params.id, amount, method:method||'Efectivo', note:note||'', registrado_por: registradoPor })
     .select().single();
-  if (pErr) return res.status(500).json({ error: pErr.message });
+  if (pErr) { console.error('[ACCOUNTS]', pErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
   // Recalcular totales
   var { data: pmts } = await supabase.from('account_payments').select('amount').eq('account_id', req.params.id);

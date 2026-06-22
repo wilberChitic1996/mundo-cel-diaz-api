@@ -8,7 +8,7 @@ router.get('/', auth, async (req, res) => {
   const { data, error } = await supabase
     .from('returns').select('*, return_items(*)')
     .order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[RETURNS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -25,7 +25,7 @@ router.post('/', auth, async (req, res) => {
       item_condition: itemCondition||'bueno',
       total, user_id: req.user.userId })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[RETURNS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
 
   // Insertar items
   if (items && items.length) {

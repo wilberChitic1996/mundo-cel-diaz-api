@@ -2,16 +2,15 @@ const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
 const crypto   = require('crypto');
+const bcrypt   = require('bcryptjs');
 const supabase = require('../supabase');
 
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password + 'mnpos_salt_2026').digest('hex');
+async function hashPassword(password) {
+  return bcrypt.hash(password, 10);
 }
 
-// Hashea la respuesta de seguridad con la MISMA normalización que el frontend
-// (trim + lowercase + salt) para que los hashes coincidan en login/recuperación.
 function hashAnswer(answer) {
-  return hashPassword(String(answer).trim().toLowerCase());
+  return crypto.createHash('sha256').update(String(answer).trim().toLowerCase() + 'mnpos_salt_2026').digest('hex');
 }
 
 // GET /api/users  -> lista de usuarios (incluye sec_question para mostrar estado)
@@ -21,7 +20,7 @@ router.get('/', auth, async (req, res) => {
     .from('users')
     .select('id,name,email,role,active,last_login,created_at,sec_question')
     .order('name');
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[USERS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -33,7 +32,7 @@ router.post('/', auth, async (req, res) => {
   const row = {
     name,
     email: email.toLowerCase(),
-    password_hash: hashPassword(password),
+    password_hash: await hashPassword(password),
     role,
     active: true
   };
@@ -45,7 +44,7 @@ router.post('/', auth, async (req, res) => {
     .from('users')
     .insert(row)
     .select('id,name,email,role,active,sec_question').single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[USERS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.status(201).json(data);
 });
 
@@ -62,7 +61,7 @@ router.put('/:id', auth, async (req, res) => {
   if (b.active !== undefined) updates.active = b.active;
 
   // password en texto plano -> hash (si viene vacío, no se cambia)
-  if (b.password) updates.password_hash = hashPassword(b.password);
+  if (b.password) updates.password_hash = await hashPassword(b.password);
 
   // pregunta de seguridad (texto)
   if (b.secQuestion !== undefined) updates.sec_question = b.secQuestion || null;
@@ -75,7 +74,7 @@ router.put('/:id', auth, async (req, res) => {
     .update(updates)
     .eq('id', req.params.id)
     .select('id,name,email,role,active,sec_question').single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[USERS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
