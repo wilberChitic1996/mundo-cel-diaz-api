@@ -1,16 +1,19 @@
 {
-  "name": "mundoceldiaz-api",
-  "version": "1.0.0",
+  "name": "praxisgt-api",
+  "version": "2.2.0",
+  "description": "PraxisGT — API de gestión empresarial para Guatemala",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",
     "bcryptjs": "^3.0.3",
