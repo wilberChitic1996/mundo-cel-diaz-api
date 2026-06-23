@@ -144,6 +144,73 @@ router.get('/stats', auth, superadminOnly, async (req, res) => {
   });
 });
 
+// GET /api/admin/tenants/:id/users — lista usuarios de un tenant
+router.get('/tenants/:id/users', auth, superadminOnly, async (req, res) => {
+  var { data, error } = await supabase
+    .from('users')
+    .select('id,name,email,role,active,created_at')
+    .eq('tenant_id', req.params.id)
+    .neq('role', 'superadmin')
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: 'Error interno' });
+  res.json(data || []);
+});
+
+// PUT /api/admin/users/:id/reset-password — resetea contraseña de cualquier usuario
+router.put('/users/:id/reset-password', auth, superadminOnly, async (req, res) => {
+  var { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6)
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+
+  var { data: targetUser } = await supabase
+    .from('users').select('id,role,tenant_id').eq('id', req.params.id).single();
+  if (!targetUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+  if (targetUser.role === 'superadmin') return res.status(403).json({ error: 'No se puede modificar al superadmin desde aquí' });
+
+  var hash = await bcrypt.hash(newPassword, 10);
+  var { error } = await supabase.from('users').update({ password_hash: hash }).eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: 'Error interno' });
+  res.json({ ok: true });
+});
+
+// PUT /api/admin/users/:id/toggle — activar/desactivar usuario
+router.put('/users/:id/toggle', auth, superadminOnly, async (req, res) => {
+  var { data: targetUser } = await supabase.from('users').select('id,role,active').eq('id', req.params.id).single();
+  if (!targetUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+  if (targetUser.role === 'superadmin') return res.status(403).json({ error: 'No permitido' });
+
+  var { data, error } = await supabase
+    .from('users').update({ active: !targetUser.active }).eq('id', req.params.id).select('id,name,email,role,active').single();
+  if (error) return res.status(500).json({ error: 'Error interno' });
+  res.json(data);
+});
+
+// PUT /api/admin/me — superadmin actualiza sus propias credenciales
+router.put('/me', auth, superadminOnly, async (req, res) => {
+  var { name, email, currentPassword, newPassword } = req.body;
+  if (!currentPassword) return res.status(400).json({ error: 'Se requiere la contraseña actual' });
+
+  var { data: me } = await supabase.from('users').select('id,password_hash').eq('id', req.user.id).single();
+  if (!me) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  var valid = await bcrypt.compare(currentPassword, me.password_hash);
+  if (!valid) return res.status(401).json({ error: 'Contraseña actual incorrecta' });
+
+  var updates = {};
+  if (name)  updates.name  = name;
+  if (email) updates.email = email.toLowerCase();
+  if (newPassword) {
+    if (newPassword.length < 6) return res.status(400).json({ error: 'Nueva contraseña debe tener al menos 6 caracteres' });
+    updates.password_hash = await bcrypt.hash(newPassword, 10);
+  }
+  if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
+
+  var { data, error } = await supabase
+    .from('users').update(updates).eq('id', req.user.id).select('id,name,email,role').single();
+  if (error) return res.status(500).json({ error: 'Error interno' });
+  res.json(data);
+});
+
 // GET /api/admin/subscription — verifica suscripción del tenant actual (para el frontend)
 router.get('/subscription', auth, async (req, res) => {
   if (!req.user.tenant_id) return res.json({ ok: true, daysLeft: null });
