@@ -3,11 +3,13 @@ const router   = express.Router();
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
+const { withTenant, tid } = require('../utils/tenant');
 
 // GET /api/clients
 router.get('/', auth, async (req, res) => {
-  var { data, error } = await supabase
-    .from('clients').select('*').order('created_at', { ascending: false });
+  var q = supabase.from('clients').select('*').order('created_at', { ascending: false });
+  q = withTenant(q, req);
+  var { data, error } = await q;
   if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data || []);
 });
@@ -17,7 +19,7 @@ router.post('/', auth, async (req, res) => {
   var { id, cliCode, name, dpi, phone, address, active, createdAt } = req.body;
   var { data, error } = await supabase
     .from('clients')
-    .insert([{ id, cli_code: cliCode, name, dpi: dpi||null, phone: phone||null, address: address||null, active: active!==false, created_at: createdAt||new Date().toISOString() }])
+    .insert([{ id, cli_code: cliCode, name, dpi: dpi||null, phone: phone||null, address: address||null, active: active!==false, created_at: createdAt||new Date().toISOString(), tenant_id: tid(req) }])
     .select().single();
   if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'cliente_creado', 'client', data.id, { nombre: name, codigo: cliCode, telefono: phone||'—', dpi: dpi||'—' });
@@ -28,12 +30,14 @@ router.post('/', auth, async (req, res) => {
 router.put('/:id', auth, async (req, res) => {
   var { cliCode, name, dpi, phone, address, active } = req.body;
 
-  var { data: before } = await supabase.from('clients').select('*').eq('id', req.params.id).single();
+  var { data: before } = await withTenant(supabase.from('clients').select('*').eq('id', req.params.id), req).single();
 
-  var { data, error } = await supabase
-    .from('clients')
-    .update({ cli_code: cliCode, name, dpi: dpi||null, phone: phone||null, address: address||null, active: active!==false, updated_at: new Date() })
-    .eq('id', req.params.id).select().single();
+  var { data, error } = await withTenant(
+    supabase.from('clients')
+      .update({ cli_code: cliCode, name, dpi: dpi||null, phone: phone||null, address: address||null, active: active!==false, updated_at: new Date() })
+      .eq('id', req.params.id),
+    req
+  ).select().single();
   if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
 
   var CAMPOS = { name:'Nombre', dpi:'DPI', phone:'Teléfono', address:'Dirección', active:'Activo' };
@@ -53,8 +57,8 @@ router.put('/:id', auth, async (req, res) => {
 
 // DELETE /api/clients/:id
 router.delete('/:id', auth, async (req, res) => {
-  var { data: before } = await supabase.from('clients').select('name,cli_code').eq('id', req.params.id).single();
-  var { error } = await supabase.from('clients').update({ active: false, updated_at: new Date() }).eq('id', req.params.id);
+  var { data: before } = await withTenant(supabase.from('clients').select('name,cli_code').eq('id', req.params.id), req).single();
+  var { error } = await withTenant(supabase.from('clients').update({ active: false, updated_at: new Date() }).eq('id', req.params.id), req);
   if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'cliente_eliminado', 'client', req.params.id, { nombre: before ? before.name : '—', codigo: before ? before.cli_code : '—' });
   res.json({ success: true });

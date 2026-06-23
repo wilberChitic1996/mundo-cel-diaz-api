@@ -2,10 +2,11 @@ const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
+const { withTenant } = require('../utils/tenant');
 
-// GET /api/audit — solo admin
+// GET /api/audit — admin y superadmin
 router.get('/', auth, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acceso denegado' });
+  if (!['admin','superadmin'].includes(req.user.role)) return res.status(403).json({ error: 'Acceso denegado' });
 
   var page    = Math.max(1, parseInt(req.query.page)  || 1);
   var limit   = Math.min(100, parseInt(req.query.limit) || 50);
@@ -15,6 +16,7 @@ router.get('/', auth, async (req, res) => {
   var user    = req.query.user    || null;
 
   var q = supabase.from('audit_logs').select('*', { count: 'exact' });
+  q = withTenant(q, req);
   if (entity) q = q.eq('entity_type', entity);
   if (action) q = q.eq('action', action);
   if (user)   q = q.ilike('user_name', '%' + user + '%');
