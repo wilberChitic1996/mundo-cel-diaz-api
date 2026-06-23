@@ -31,7 +31,7 @@ app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/admin',     require('./routes/admin'));
 
 app.get('/health', function(req, res) {
-  res.json({ status:'ok', version:'1.2.0', system:'MUNDO CEL DIAZ API' });
+  res.json({ status:'ok', version:'2.2.0', system:'PraxisGT API' });
 });
 
 app.use(function(req, res) { res.status(404).json({ error:'Ruta no encontrada' }); });
