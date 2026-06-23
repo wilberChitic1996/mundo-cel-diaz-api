@@ -12,6 +12,7 @@ app.use(cors({
   origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
   credentials: true
 }));
+app.use('/api/settings', express.json({ limit: '600kb' }));
 app.use(express.json({ limit: '10kb' }));
 
 app.use('/api/auth',      require('./routes/auth'));
