@@ -29,6 +29,7 @@ app.use('/api/repairs',   require('./routes/repairs'));
 app.use('/api/audit',      require('./routes/audit'));
 app.use('/api/warranties', require('./routes/warranties'));
 app.use('/api/caja',      require('./routes/caja'));
+app.use('/api/settings',  require('./routes/settings'));
 
 app.get('/health', function(req, res) {
   res.json({ status:'ok', version:'1.2.0', system:'MUNDO CEL DIAZ API' });
