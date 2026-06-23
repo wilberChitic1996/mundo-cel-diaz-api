@@ -87,7 +87,20 @@ router.post('/', auth, async (req, res) => {
     var balance = total - paid;
     var status  = balance <= 0 ? 'pagado' : paid > 0 ? 'parcial' : 'pendiente';
 
-    var accInsert = { client, total, paid, balance, status, method: method||'Efectivo', user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId };
+    // Crear el registro en sales para que aparezca en reportes y respaldo
+    var saleInsert2 = {
+      client, total, method: method||'Efectivo', status: 'cuenta',
+      pay_type: payType === 'parcial' ? 'parcial' : 'credito',
+      user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId
+    };
+    var { data: creditSale, error: csErr } = await supabase.from('sales').insert(saleInsert2).select().single();
+    if (csErr) { console.error('[SALES credit]', csErr.message); return res.status(500).json({ error: 'Error interno' }); }
+
+    await supabase.from('sale_items').insert(
+      items.map(function(i){ return { sale_id:creditSale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty }; })
+    );
+
+    var accInsert = { client, total, paid, balance, status, method: method||'Efectivo', sale_id: creditSale.id, user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId };
     if (idempotencyKey) accInsert.idempotency_key = idempotencyKey;
 
     var { data: acc, error: aErr } = await supabase.from('accounts').insert(accInsert).select().single();
@@ -116,7 +129,7 @@ router.post('/', auth, async (req, res) => {
       cliente: client, total, abono_inicial: paid, tipo: payType,
       articulos: items.map(function(i){ return i.name+' x'+i.qty; }).join(', ')
     });
-    return res.status(201).json({ type:'account', ...acc });
+    return res.status(201).json({ type:'account', sale_id: creditSale.id, ...acc });
   }
 });
 
