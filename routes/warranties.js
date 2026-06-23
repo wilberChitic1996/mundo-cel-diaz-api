@@ -3,13 +3,13 @@ const router   = express.Router();
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
+const { withTenant, tid } = require('../utils/tenant');
 
 // GET /api/warranties
 router.get('/', auth, async (req, res) => {
-  var { data, error } = await supabase
-    .from('warranties')
-    .select('*')
-    .order('end_date', { ascending: true });
+  var q = supabase.from('warranties').select('*').order('end_date', { ascending: true });
+  q = withTenant(q, req);
+  var { data, error } = await q;
   if (error) { console.error('[WARRANTIES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data || []);
 });
@@ -26,7 +26,7 @@ router.post('/', auth, async (req, res) => {
   }
   var { data, error } = await supabase
     .from('warranties')
-    .insert({ entity_type: entityType, entity_id: String(entityId), client, description, start_date: start, end_date: end, status: 'vigente', created_by: req.user.userId })
+    .insert({ entity_type: entityType, entity_id: String(entityId), client, description, start_date: start, end_date: end, status: 'vigente', created_by: req.user.userId, tenant_id: tid(req) })
     .select().single();
   if (error) { console.error('[WARRANTIES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'garantia_creada', 'warranty', data.id, { cliente: client, descripcion: description, vence: end });
@@ -40,8 +40,8 @@ router.put('/:id', auth, async (req, res) => {
   if (status)      updates.status      = status;
   if (description) updates.description = description;
   if (endDate)     updates.end_date    = endDate;
-  var { data: before } = await supabase.from('warranties').select('*').eq('id', req.params.id).single();
-  var { data, error } = await supabase.from('warranties').update(updates).eq('id', req.params.id).select().single();
+  var { data: before } = await withTenant(supabase.from('warranties').select('*').eq('id', req.params.id), req).single();
+  var { data, error } = await withTenant(supabase.from('warranties').update(updates).eq('id', req.params.id), req).select().single();
   if (error) { console.error('[WARRANTIES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   var diff = { _garantia: before ? before.client + ' — ' + before.description : req.params.id };
   if (status && before && status !== before.status) diff['Estado'] = { antes: before.status, despues: status };

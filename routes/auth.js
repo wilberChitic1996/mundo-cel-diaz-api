@@ -55,14 +55,20 @@ router.post('/login', loginLimiter, async (req, res) => {
   await supabase.from('users').update(updateFields).eq('id', user.id);
 
   const token = jwt.sign(
-    { userId: user.id, name: user.name, email: user.email, role: user.role },
+    {
+      userId:    user.id,
+      name:      user.name,
+      email:     user.email,
+      role:      user.role,
+      tenant_id: user.tenant_id || null,
+    },
     process.env.JWT_SECRET,
     { expiresIn: '8h' }
   );
 
   res.json({
     token,
-    user: { id: user.id, name: user.name, email: user.email, role: user.role }
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null }
   });
 });
 
@@ -73,11 +79,9 @@ router.get('/me', require('../middleware/auth'), (req, res) => {
 
 /* ══════════════════════════════════════════════════════════════════
    RECUPERACIÓN DE CONTRASEÑA — endpoints públicos (NO requieren JWT)
-   Flujo: find-user (trae la pregunta) -> verify-answer (valida) ->
-          reset-password (re-valida y cambia la contraseña).
    ══════════════════════════════════════════════════════════════════ */
 
-// POST /api/auth/find-user  -> devuelve la pregunta de seguridad del usuario
+// POST /api/auth/find-user
 router.post('/find-user', recoveryLimiter, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email requerido' });
@@ -98,7 +102,7 @@ router.post('/find-user', recoveryLimiter, async (req, res) => {
   res.json({ name: users[0].name, secQuestion: users[0].sec_question });
 });
 
-// POST /api/auth/verify-answer  -> valida la respuesta (sin cambiar nada)
+// POST /api/auth/verify-answer
 router.post('/verify-answer', recoveryLimiter, async (req, res) => {
   const { email, answer } = req.body;
   if (!email || !answer) return res.status(400).json({ error: 'Email y respuesta requeridos' });
@@ -121,7 +125,7 @@ router.post('/verify-answer', recoveryLimiter, async (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /api/auth/reset-password  -> re-valida la respuesta y cambia la contraseña
+// POST /api/auth/reset-password
 router.post('/reset-password', recoveryLimiter, async (req, res) => {
   const { email, answer, newPassword } = req.body;
   if (!email || !answer || !newPassword)
