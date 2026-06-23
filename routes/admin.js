@@ -56,7 +56,7 @@ router.get('/tenants', auth, superadminOnly, async (req, res) => {
 
 // POST /api/admin/tenants — crear nuevo tenant + admin inicial
 router.post('/tenants', auth, superadminOnly, async (req, res) => {
-  var { name, plan, email, phone, ownerName, adminEmail, adminPassword, notes, months } = req.body;
+  var { name, plan, email, phone, ownerName, adminEmail, adminPassword, notes, months, skipWizard } = req.body;
   if (!name || !adminEmail || !adminPassword)
     return res.status(400).json({ error: 'name, adminEmail y adminPassword requeridos' });
 
@@ -83,7 +83,7 @@ router.post('/tenants', auth, superadminOnly, async (req, res) => {
   await supabase.from('store_settings').insert([
     { key: 'store_name',      value: name,    tenant_id: tenant.id },
     { key: 'store_tagline',   value: 'Tecnología · Accesorios · Reparaciones · Guatemala', tenant_id: tenant.id },
-    { key: 'onboarding_done', value: 'false', tenant_id: tenant.id },
+    { key: 'onboarding_done', value: skipWizard ? 'true' : 'false', tenant_id: tenant.id },
   ]);
 
   res.status(201).json({ tenant, admin: adminUser });
