@@ -211,6 +211,48 @@ router.put('/me', auth, superadminOnly, async (req, res) => {
   res.json(data);
 });
 
+// DELETE /api/admin/tenants/:id — eliminar negocio y todos sus datos
+router.delete('/tenants/:id', auth, superadminOnly, async (req, res) => {
+  var id = req.params.id;
+  var tables = [
+    'audit_logs','caja_gastos','caja_sesiones','warranties','defectives',
+    'return_items','returns','sale_items','sales','repairs',
+    'purchase_items','purchases','suppliers','products','clients',
+    'store_settings','account_items','accounts','users'
+  ];
+  for (var table of tables) {
+    await supabase.from(table).delete().eq('tenant_id', id);
+  }
+  var { error } = await supabase.from('tenants').delete().eq('id', id);
+  if (error) return res.status(500).json({ error: 'Error eliminando negocio' });
+  res.json({ ok: true });
+});
+
+// POST /api/admin/tenants/:id/users — crear usuario para un tenant
+router.post('/tenants/:id/users', auth, superadminOnly, async (req, res) => {
+  var { name, email, password, role } = req.body;
+  if (!name || !email || !password) return res.status(400).json({ error: 'name, email y password requeridos' });
+  if (!['admin','cajero','auditor'].includes(role)) return res.status(400).json({ error: 'Rol inválido' });
+  if (password.length < 6) return res.status(400).json({ error: 'Contraseña mínimo 6 caracteres' });
+  var hash = await bcrypt.hash(password, 10);
+  var { data, error } = await supabase
+    .from('users')
+    .insert({ name, email: email.toLowerCase(), password_hash: hash, role, active: true, tenant_id: req.params.id })
+    .select('id,name,email,role,active,created_at').single();
+  if (error) return res.status(500).json({ error: 'Error creando usuario: ' + error.message });
+  res.status(201).json(data);
+});
+
+// DELETE /api/admin/users/:id — eliminar usuario definitivamente
+router.delete('/users/:id', auth, superadminOnly, async (req, res) => {
+  var { data: targetUser } = await supabase.from('users').select('id,role').eq('id', req.params.id).single();
+  if (!targetUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+  if (targetUser.role === 'superadmin') return res.status(403).json({ error: 'No se puede eliminar al superadmin' });
+  var { error } = await supabase.from('users').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: 'Error eliminando usuario' });
+  res.json({ ok: true });
+});
+
 // GET /api/admin/subscription — verifica suscripción del tenant actual (para el frontend)
 router.get('/subscription', auth, async (req, res) => {
   if (!req.user.tenant_id) return res.json({ ok: true, daysLeft: null });
