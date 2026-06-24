@@ -190,7 +190,7 @@ router.put('/me', auth, superadminOnly, async (req, res) => {
   var { name, email, currentPassword, newPassword } = req.body;
   if (!currentPassword) return res.status(400).json({ error: 'Se requiere la contraseña actual' });
 
-  var { data: me } = await supabase.from('users').select('id,password_hash').eq('id', req.user.id).single();
+  var { data: me } = await supabase.from('users').select('id,password_hash').eq('id', req.user.userId).single();
   if (!me) return res.status(404).json({ error: 'Usuario no encontrado' });
 
   var valid = await bcrypt.compare(currentPassword, me.password_hash);
@@ -206,7 +206,7 @@ router.put('/me', auth, superadminOnly, async (req, res) => {
   if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
 
   var { data, error } = await supabase
-    .from('users').update(updates).eq('id', req.user.id).select('id,name,email,role').single();
+    .from('users').update(updates).eq('id', req.user.userId).select('id,name,email,role').single();
   if (error) return res.status(500).json({ error: 'Error interno' });
   res.json(data);
 });
@@ -220,9 +220,12 @@ router.delete('/tenants/:id', auth, superadminOnly, async (req, res) => {
     'purchase_items','purchases','suppliers','products','clients',
     'store_settings','account_items','accounts','users'
   ];
+  var deleteErrors = [];
   for (var table of tables) {
-    await supabase.from(table).delete().eq('tenant_id', id);
+    var { error: tErr } = await supabase.from(table).delete().eq('tenant_id', id);
+    if (tErr) { console.error('[ADMIN] Error al eliminar tabla', table, 'tenant', id, tErr.message); deleteErrors.push(table); }
   }
+  if (deleteErrors.length > 0) return res.status(500).json({ error: 'Fallo al eliminar tablas: ' + deleteErrors.join(', ') });
   var { error } = await supabase.from('tenants').delete().eq('id', id);
   if (error) return res.status(500).json({ error: 'Error eliminando negocio' });
   res.json({ ok: true });
