@@ -3,8 +3,14 @@ const router   = express.Router();
 const jwt      = require('jsonwebtoken');
 const crypto   = require('crypto');
 const bcrypt   = require('bcryptjs');
+const { Resend } = require('resend');
 const supabase = require('../supabase');
 const { loginLimiter, recoveryLimiter } = require('../middleware/rateLimit');
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Almacén en memoria de códigos 2FA — { email: { code, expires } }
+const twoFaCodes = new Map();
 
 function legacySha256(password) {
   return crypto.createHash('sha256').update(password + 'mnpos_salt_2026').digest('hex');
@@ -58,6 +64,20 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
   await supabase.from('users').update(updateFields).eq('id', user.id);
 
+  // 2FA para superadmin — enviar código por correo
+  if (user.role === 'superadmin') {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    twoFaCodes.set(user.email, { code, expires: Date.now() + 10 * 60 * 1000 });
+    await resend.emails.send({
+      from: 'PraxisGT <onboarding@resend.dev>',
+      to: user.email,
+      subject: 'Tu código de verificación — PraxisGT',
+      html: `<p>Hola <b>${user.name}</b>,</p><p>Tu código de acceso es:</p><h1 style="letter-spacing:8px;font-size:40px;">${code}</h1><p>Válido por <b>10 minutos</b>. Si no fuiste tú, cambia tu contraseña inmediatamente.</p>`
+    });
+    console.info('[SECURITY] 2FA enviado a superadmin:', user.email, '| IP:', req.ip);
+    return res.json({ requires2fa: true, email: user.email });
+  }
+
   const token = jwt.sign(
     {
       userId:    user.id,
@@ -75,6 +95,38 @@ router.post('/login', loginLimiter, async (req, res) => {
     token,
     user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null }
   });
+});
+
+// POST /api/auth/verify-2fa
+router.post('/verify-2fa', loginLimiter, async (req, res) => {
+  const { email, code } = req.body;
+  if (!email || !code) return res.status(400).json({ error: 'Email y código requeridos' });
+
+  const entry = twoFaCodes.get(email.toLowerCase().trim());
+  if (!entry) return res.status(401).json({ error: 'No hay código activo para este usuario' });
+  if (Date.now() > entry.expires) {
+    twoFaCodes.delete(email.toLowerCase().trim());
+    return res.status(401).json({ error: 'El código expiró. Iniciá sesión nuevamente.' });
+  }
+  if (entry.code !== String(code).trim()) {
+    console.warn('[SECURITY] 2FA código incorrecto para:', email, '| IP:', req.ip);
+    return res.status(401).json({ error: 'Código incorrecto' });
+  }
+
+  twoFaCodes.delete(email.toLowerCase().trim());
+
+  const { data: users } = await supabase.from('users').select('*').eq('email', email.toLowerCase().trim()).limit(1);
+  if (!users || users.length === 0) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const user = users[0];
+
+  const token = jwt.sign(
+    { userId: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null },
+    process.env.JWT_SECRET,
+    { expiresIn: '8h' }
+  );
+
+  console.info('[SECURITY] 2FA verificado — login superadmin exitoso:', user.email, '| IP:', req.ip);
+  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null } });
 });
 
 // GET /api/auth/me
