@@ -63,9 +63,14 @@ router.post('/', auth, async (req, res) => {
     var { data: sale, error: sErr } = await supabase.from('sales').insert(insertData).select().single();
     if (sErr) { console.error('[SALES]', sErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
-    await supabase.from('sale_items').insert(
+    var { error: siErr } = await supabase.from('sale_items').insert(
       items.map(function(i){ return { sale_id:sale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty }; })
     );
+    if (siErr) {
+      console.error('[SALES] sale_items insert failed for sale', sale.id, siErr.message);
+      await supabase.from('sales').delete().eq('id', sale.id);
+      return res.status(500).json({ error: 'Error al guardar ítems de venta' });
+    }
 
     for (var item of items) {
       if (item.id && item.unit !== 'serv') {
@@ -96,9 +101,14 @@ router.post('/', auth, async (req, res) => {
     var { data: creditSale, error: csErr } = await supabase.from('sales').insert(saleInsert2).select().single();
     if (csErr) { console.error('[SALES credit]', csErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
-    await supabase.from('sale_items').insert(
+    var { error: csiErr } = await supabase.from('sale_items').insert(
       items.map(function(i){ return { sale_id:creditSale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty }; })
     );
+    if (csiErr) {
+      console.error('[SALES] sale_items (credit) insert failed for sale', creditSale.id, csiErr.message);
+      await supabase.from('sales').delete().eq('id', creditSale.id);
+      return res.status(500).json({ error: 'Error al guardar ítems de venta' });
+    }
 
     var accInsert = { client, total, paid, balance, status, method: method||'Efectivo', sale_id: creditSale.id, user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId };
     if (idempotencyKey) accInsert.idempotency_key = idempotencyKey;

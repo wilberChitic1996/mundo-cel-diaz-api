@@ -37,6 +37,10 @@ router.post('/:id/payments', auth, async (req, res) => {
   var { amount, method, note } = req.body;
   var registradoPor = { name: req.user.name, role: req.user.role };
 
+  // Verificar que la cuenta pertenece al tenant del usuario antes de registrar el pago
+  var { data: acc, error: accErr } = await withTenant(supabase.from('accounts').select('id,total').eq('id', req.params.id), req).single();
+  if (accErr || !acc) return res.status(404).json({ error: 'Cuenta no encontrada' });
+
   var { data: pmt, error: pErr } = await supabase
     .from('account_payments')
     .insert({ account_id:req.params.id, amount, method:method||'Efectivo', note:note||'', registrado_por: registradoPor })
@@ -45,7 +49,6 @@ router.post('/:id/payments', auth, async (req, res) => {
 
   var { data: pmts } = await supabase.from('account_payments').select('amount').eq('account_id', req.params.id);
   var totalPaid  = (pmts||[]).reduce(function(s,p){return s+Number(p.amount);},0);
-  var { data: acc } = await withTenant(supabase.from('accounts').select('total').eq('id', req.params.id), req).single();
   var newBalance = Math.max(0, Number(acc.total) - totalPaid);
   var newStatus  = newBalance <= 0 ? 'pagado' : totalPaid > 0 ? 'parcial' : 'pendiente';
 
