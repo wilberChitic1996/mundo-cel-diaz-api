@@ -74,10 +74,12 @@ router.post('/', auth, async (req, res) => {
 
     for (var item of items) {
       if (item.id && item.unit !== 'serv') {
-        var { data: prod } = await withTenant(supabase.from('products').select('stock').eq('id', item.id), req).single();
-        if (prod && prod.stock >= item.qty) {
-          await withTenant(supabase.from('products').update({ stock: prod.stock - item.qty, updated_at: new Date() }).eq('id', item.id), req);
-        }
+        var { error: rpcErr } = await supabase.rpc('decrement_stock', {
+          p_product_id: item.id,
+          p_qty: item.qty,
+          p_tenant_id: tenantId
+        });
+        if (rpcErr) console.error('[SALES] decrement_stock RPC error para producto', item.id, rpcErr.message);
       }
     }
 
@@ -128,10 +130,12 @@ router.post('/', auth, async (req, res) => {
 
     for (var item2 of items) {
       if (item2.id && item2.unit !== 'serv') {
-        var { data: prod2 } = await withTenant(supabase.from('products').select('stock').eq('id', item2.id), req).single();
-        if (prod2 && prod2.stock >= item2.qty) {
-          await withTenant(supabase.from('products').update({ stock: prod2.stock - item2.qty, updated_at: new Date() }).eq('id', item2.id), req);
-        }
+        var { error: rpcErr2 } = await supabase.rpc('decrement_stock', {
+          p_product_id: item2.id,
+          p_qty: item2.qty,
+          p_tenant_id: tenantId
+        });
+        if (rpcErr2) console.error('[SALES] decrement_stock RPC error para producto', item2.id, rpcErr2.message);
       }
     }
 
