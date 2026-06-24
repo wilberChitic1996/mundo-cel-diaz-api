@@ -30,4 +30,15 @@ const recoveryLimiter = rateLimit({
   message: { error: 'Demasiados intentos de recuperación. Esperá 15 minutos e intentá de nuevo.' },
 });
 
-module.exports = { loginLimiter, recoveryLimiter };
+// Limiter general para todos los endpoints autenticados.
+// 200 peticiones por IP cada 1 minuto — suficiente para uso normal,
+// bloquea bots y ataques de enumeración masiva.
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 200,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Demasiadas peticiones. Intentá de nuevo en un momento.' },
+});
+
+module.exports = { loginLimiter, recoveryLimiter, generalLimiter };

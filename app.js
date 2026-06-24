@@ -1,9 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
+const helmet  = require('helmet');
+const { generalLimiter } = require('./middleware/rateLimit');
 
 const app = express();
 app.set('trust proxy', 1);
+
+app.use(helmet());
 
 var allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(function(u) { return u.trim(); })
@@ -12,6 +16,7 @@ app.use(cors({
   origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
   credentials: true
 }));
+app.use(generalLimiter);
 app.use('/api/settings', express.json({ limit: '600kb' }));
 app.use(express.json({ limit: '10kb' }));
 
