@@ -12,6 +12,7 @@ module.exports = function authMiddleware(req, res, next) {
     req.user = decoded;
     next();
   } catch (err) {
+    console.warn('[SECURITY] Token inválido o expirado | IP:', req.ip, '| ruta:', req.originalUrl);
     return res.status(401).json({ error: 'Token expirado o inválido' });
   }
 };

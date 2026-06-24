@@ -38,14 +38,18 @@ router.post('/login', loginLimiter, async (req, res) => {
     .eq('active', true)
     .limit(1);
 
-  if (error || !users || users.length === 0)
+  if (error || !users || users.length === 0) {
+    console.warn('[SECURITY] Login fallido — email no encontrado:', email.toLowerCase().trim(), '| IP:', req.ip, '| UA:', req.headers['user-agent']);
     return res.status(401).json({ error: 'Credenciales incorrectas' });
+  }
 
   const user = users[0];
   const valid = await verifyPassword(password, user.password_hash);
 
-  if (!valid)
+  if (!valid) {
+    console.warn('[SECURITY] Login fallido — contraseña incorrecta:', email.toLowerCase().trim(), '| IP:', req.ip, '| UA:', req.headers['user-agent']);
     return res.status(401).json({ error: 'Credenciales incorrectas' });
+  }
 
   // Auto-migrar hash SHA-256 a bcrypt en login exitoso
   var updateFields = { last_login: new Date().toISOString() };
@@ -66,6 +70,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     { expiresIn: '8h' }
   );
 
+  console.info('[SECURITY] Login exitoso:', user.email, '| rol:', user.role, '| IP:', req.ip);
   res.json({
     token,
     user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null }
