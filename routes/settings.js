@@ -26,15 +26,13 @@ router.put('/', auth, async (req, res) => {
     return { key: k, value: String(updates[k] || ''), updated_at: new Date().toISOString(), tenant_id: tenantId };
   });
 
-  // Upsert con conflicto en (tenant_id, key) — requiere constraint en DB
   var { error } = await supabase
     .from('store_settings')
     .upsert(rows, { onConflict: 'tenant_id,key' });
 
-  // Fallback: si falla por constraint no existente, hacer upsert por key solo
   if (error) {
-    var { error: e2 } = await supabase.from('store_settings').upsert(rows, { onConflict: 'key' });
-    if (e2) return res.status(500).json({ error: 'Error interno' });
+    console.error('[SETTINGS] upsert error:', error.message);
+    return res.status(500).json({ error: 'Error interno al guardar configuración' });
   }
 
   res.json({ ok: true });
