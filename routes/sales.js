@@ -16,7 +16,7 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/sales
 router.post('/', auth, async (req, res) => {
-  var { client, total, method, items, payType, initialPay, idempotencyKey } = req.body;
+  var { client, total, method, items, payType, initialPay, idempotencyKey, nota } = req.body;
   if (!client || !items || !items.length)
     return res.status(400).json({ error: 'Datos incompletos' });
 
@@ -59,6 +59,7 @@ router.post('/', auth, async (req, res) => {
   if (payType === 'completo') {
     var insertData = { client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId };
     if (idempotencyKey) insertData.idempotency_key = idempotencyKey;
+    if (nota) insertData.nota = nota;
 
     var { data: sale, error: sErr } = await supabase.from('sales').insert(insertData).select().single();
     if (sErr) { console.error('[SALES]', sErr.message); return res.status(500).json({ error: 'Error interno' }); }
@@ -100,6 +101,7 @@ router.post('/', auth, async (req, res) => {
       pay_type: payType === 'parcial' ? 'parcial' : 'credito',
       user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId
     };
+    if (nota) saleInsert2.nota = nota;
     var { data: creditSale, error: csErr } = await supabase.from('sales').insert(saleInsert2).select().single();
     if (csErr) { console.error('[SALES credit]', csErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
