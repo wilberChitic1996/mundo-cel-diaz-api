@@ -17,6 +17,9 @@ router.get('/', auth, async (req, res) => {
 // POST /api/returns
 router.post('/', auth, async (req, res) => {
   const { client, saleId, reason, refundMethod, refundAmount, itemCondition, items } = req.body;
+  if (!['bueno', 'defectuoso'].includes(itemCondition)) {
+    return res.status(400).json({ error: 'itemCondition debe ser "bueno" o "defectuoso"' });
+  }
   const total = (items||[]).reduce(function(s,i){return s+i.price*i.qty;},0);
   const tenantId = tid(req);
 
