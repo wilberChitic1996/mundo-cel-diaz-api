@@ -34,6 +34,8 @@ app.use('/api/warranties', require('./routes/warranties'));
 app.use('/api/caja',      require('./routes/caja'));
 app.use('/api/settings',  require('./routes/settings'));
 app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/categories',require('./routes/categories'));
+app.use('/api/locations', require('./routes/locations'));
 app.use('/api/admin',     require('./routes/admin'));
 
 app.get('/health', function(req, res) {
