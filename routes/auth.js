@@ -116,7 +116,7 @@ router.post('/verify-2fa', loginLimiter, async (req, res) => {
 
   twoFaCodes.delete(email.toLowerCase().trim());
 
-  const { data: users } = await supabase.from('users').select('*').eq('email', email.toLowerCase().trim()).limit(1);
+  const { data: users } = await supabase.from('users').select('*').eq('email', email.toLowerCase().trim()).eq('active', true).limit(1);
   if (!users || users.length === 0) return res.status(401).json({ error: 'Usuario no encontrado' });
   const user = users[0];
 
