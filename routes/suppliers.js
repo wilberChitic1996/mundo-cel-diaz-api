@@ -19,10 +19,10 @@ router.get('/', auth, async (req, res) => {
 // POST /api/suppliers
 router.post('/', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
-  var { name, phone, email, address, notes } = req.body;
+  var { name, nit, phone, email, address, notes } = req.body;
   if (!name) return res.status(400).json({ error: 'Nombre requerido' });
   var { data, error } = await supabase
-    .from('suppliers').insert({ name, phone, email, address, notes, tenant_id: tid(req) }).select().single();
+    .from('suppliers').insert({ name, nit: nit||null, phone, email, address, notes, tenant_id: tid(req) }).select().single();
   if (error) return res.status(500).json({ error: 'Error interno' });
   await logAudit(req.user, 'proveedor_creado', 'supplier', data.id, { nombre: name });
   res.status(201).json(data);
@@ -31,9 +31,10 @@ router.post('/', auth, async (req, res) => {
 // PUT /api/suppliers/:id
 router.put('/:id', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
-  var { name, phone, email, address, notes, active } = req.body;
+  var { name, nit, phone, email, address, notes, active } = req.body;
   var updates = {};
   if (name     !== undefined) updates.name    = name;
+  if (nit      !== undefined) updates.nit     = nit||null;
   if (phone    !== undefined) updates.phone   = phone;
   if (email    !== undefined) updates.email   = email;
   if (address  !== undefined) updates.address = address;
