@@ -59,6 +59,47 @@ router.put('/:id', auth, async (req, res) => {
   res.json(data);
 });
 
+// POST /api/products/:id/adjust-stock
+router.post('/:id/adjust-stock', auth, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+  var { new_stock, reason } = req.body;
+  if (new_stock === undefined || isNaN(parseInt(new_stock))) return res.status(400).json({ error: 'new_stock requerido' });
+  if (!reason || !reason.trim()) return res.status(400).json({ error: 'Motivo del ajuste requerido' });
+
+  var { data: prod } = await withTenant(supabase.from('products').select('stock,name').eq('id', req.params.id), req).single();
+  if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+  var qty_before = Number(prod.stock);
+  var qty_after  = parseInt(new_stock);
+  var qty_change = qty_after - qty_before;
+
+  var { data, error } = await withTenant(
+    supabase.from('products').update({ stock: qty_after, updated_at: new Date() }).eq('id', req.params.id), req
+  ).select().single();
+  if (error) { console.error('[PRODUCTS:adjust]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+
+  await supabase.from('stock_movements').insert({
+    tenant_id: tid(req), product_id: req.params.id,
+    type: 'ajuste', qty_before, qty_change, qty_after,
+    reason: reason.trim(), user_name: req.user.name, user_role: req.user.role,
+  });
+  await logAudit(req.user, 'stock_ajustado', 'product', req.params.id, {
+    _producto: prod.name, antes: qty_before, despues: qty_after, motivo: reason.trim(),
+  });
+  res.json(data);
+});
+
+// GET /api/products/:id/stock-history
+router.get('/:id/stock-history', auth, async (req, res) => {
+  var q = supabase.from('stock_movements')
+    .select('*').eq('product_id', req.params.id)
+    .order('created_at', { ascending: false }).limit(100);
+  q = withTenant(q, req);
+  var { data, error } = await q;
+  if (error) { console.error('[PRODUCTS:stock-history]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  res.json(data || []);
+});
+
 // GET /api/products/:id/price-history
 router.get('/:id/price-history', auth, async (req, res) => {
   var q = supabase
