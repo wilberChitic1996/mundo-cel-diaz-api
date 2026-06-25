@@ -64,19 +64,20 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
   await supabase.from('users').update(updateFields).eq('id', user.id);
 
-  // 2FA para superadmin — enviar código por correo
-  if (user.role === 'superadmin') {
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    twoFaCodes.set(user.email, { code, expires: Date.now() + 10 * 60 * 1000 });
-    await resend.emails.send({
-      from: 'Mundo Cel Diaz <noreply@mundoceldiaz.com>',
-      to: user.email,
-      subject: 'Tu código de verificación — Mundo Cel Diaz',
-      html: `<p>Hola <b>${user.name}</b>,</p><p>Tu código de acceso es:</p><h1 style="letter-spacing:8px;font-size:40px;">${code}</h1><p>Válido por <b>10 minutos</b>. Si no fuiste tú, cambia tu contraseña inmediatamente.</p>`
-    });
-    console.info('[SECURITY] 2FA enviado a superadmin:', user.email, '| IP:', req.ip);
-    return res.json({ requires2fa: true, email: user.email });
-  }
+  // 2FA para superadmin — TEMPORALMENTE DESHABILITADO hasta que dominio Resend esté verificado
+  // TODO: re-habilitar este bloque cuando mundoceldiaz.com esté verificado en Resend
+  // if (user.role === 'superadmin') {
+  //   const code = String(Math.floor(100000 + Math.random() * 900000));
+  //   twoFaCodes.set(user.email, { code, expires: Date.now() + 10 * 60 * 1000 });
+  //   await resend.emails.send({
+  //     from: 'Mundo Cel Diaz <noreply@mundoceldiaz.com>',
+  //     to: user.email,
+  //     subject: 'Tu código de verificación — Mundo Cel Diaz',
+  //     html: `<p>Hola <b>${user.name}</b>,</p><p>Tu código de acceso es:</p><h1 style="letter-spacing:8px;font-size:40px;">${code}</h1><p>Válido por <b>10 minutos</b>. Si no fuiste tú, cambia tu contraseña inmediatamente.</p>`
+  //   });
+  //   console.info('[SECURITY] 2FA enviado a superadmin:', user.email, '| IP:', req.ip);
+  //   return res.json({ requires2fa: true, email: user.email });
+  // }
 
   const token = jwt.sign(
     {
