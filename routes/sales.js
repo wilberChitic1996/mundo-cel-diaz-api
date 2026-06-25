@@ -64,7 +64,7 @@ router.post('/', auth, async (req, res) => {
     if (sErr) { console.error('[SALES]', sErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: siErr } = await supabase.from('sale_items').insert(
-      items.map(function(i){ return { sale_id:sale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty }; })
+      items.map(function(i){ return { sale_id:sale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (siErr) {
       console.error('[SALES] sale_items insert failed for sale', sale.id, siErr.message);
@@ -104,7 +104,7 @@ router.post('/', auth, async (req, res) => {
     if (csErr) { console.error('[SALES credit]', csErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: csiErr } = await supabase.from('sale_items').insert(
-      items.map(function(i){ return { sale_id:creditSale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty }; })
+      items.map(function(i){ return { sale_id:creditSale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (csiErr) {
       console.error('[SALES] sale_items (credit) insert failed for sale', creditSale.id, csiErr.message);
@@ -119,12 +119,12 @@ router.post('/', auth, async (req, res) => {
     if (aErr) { console.error('[SALES]', aErr.message); return res.status(500).json({ error: 'Error interno' }); }
 
     await supabase.from('account_items').insert(
-      items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty }; })
+      items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty, tenant_id:tenantId }; })
     );
 
     if (paid > 0) {
       await supabase.from('account_payments').insert({
-        account_id: acc.id, amount: paid, method: method||'Efectivo', note: 'Abono inicial', registrado_por: registradoPor
+        account_id: acc.id, amount: paid, method: method||'Efectivo', note: 'Abono inicial', registrado_por: registradoPor, tenant_id: tenantId
       });
     }
 

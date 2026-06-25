@@ -214,17 +214,40 @@ router.put('/me', auth, superadminOnly, async (req, res) => {
 // DELETE /api/admin/tenants/:id — eliminar negocio y todos sus datos
 router.delete('/tenants/:id', auth, superadminOnly, async (req, res) => {
   var id = req.params.id;
-  var tables = [
-    'audit_logs','caja_gastos','caja_sesiones','warranties','defectives',
-    'return_items','returns','sale_items','sales','repairs',
-    'purchase_items','purchases','suppliers','products','clients',
-    'store_settings','account_items','accounts','users'
-  ];
   var deleteErrors = [];
-  for (var table of tables) {
+
+  // Tablas con tenant_id directo — borrar en orden FK-safe
+  var directTables = [
+    'audit_logs','caja_gastos','caja_sesiones','warranties','defectives',
+    'returns','sales','repairs','purchases','suppliers','products','clients',
+    'store_settings','accounts','users'
+  ];
+
+  // Tablas hijo sin tenant_id — borrar vía FK de la tabla padre
+  var childDeletes = [
+    { child: 'sale_items',      fkCol: 'sale_id',     parent: 'sales' },
+    { child: 'account_items',   fkCol: 'account_id',  parent: 'accounts' },
+    { child: 'account_payments',fkCol: 'account_id',  parent: 'accounts' },
+    { child: 'return_items',    fkCol: 'return_id',   parent: 'returns' },
+    { child: 'purchase_items',  fkCol: 'purchase_id', parent: 'purchases' },
+  ];
+
+  // 1. Borrar tablas hijo primero (antes de borrar padres)
+  for (var cd of childDeletes) {
+    var { data: parentIds } = await supabase.from(cd.parent).select('id').eq('tenant_id', id);
+    if (parentIds && parentIds.length) {
+      var ids = parentIds.map(function(r){ return r.id; });
+      var { error: cdErr } = await supabase.from(cd.child).delete().in(cd.fkCol, ids);
+      if (cdErr) { console.error('[ADMIN] Error al eliminar', cd.child, cdErr.message); deleteErrors.push(cd.child); }
+    }
+  }
+
+  // 2. Borrar tablas directas
+  for (var table of directTables) {
     var { error: tErr } = await supabase.from(table).delete().eq('tenant_id', id);
     if (tErr) { console.error('[ADMIN] Error al eliminar tabla', table, 'tenant', id, tErr.message); deleteErrors.push(table); }
   }
+
   if (deleteErrors.length > 0) return res.status(500).json({ error: 'Fallo al eliminar tablas: ' + deleteErrors.join(', ') });
   var { error } = await supabase.from('tenants').delete().eq('id', id);
   if (error) return res.status(500).json({ error: 'Error eliminando negocio' });

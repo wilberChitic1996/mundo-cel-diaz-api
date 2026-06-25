@@ -25,7 +25,7 @@ router.post('/', auth, async (req, res) => {
   if (error) { console.error('[ACCOUNTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   if (items && items.length) {
     await supabase.from('account_items').insert(
-      items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty }; })
+      items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty, tenant_id: tid(req) }; })
     );
   }
   await logAudit(req.user, 'cuenta_creada', 'account', acc.id, { client, total });
@@ -43,7 +43,7 @@ router.post('/:id/payments', auth, async (req, res) => {
 
   var { data: pmt, error: pErr } = await supabase
     .from('account_payments')
-    .insert({ account_id:req.params.id, amount, method:method||'Efectivo', note:note||'', registrado_por: registradoPor })
+    .insert({ account_id:req.params.id, amount, method:method||'Efectivo', note:note||'', registrado_por: registradoPor, tenant_id: tid(req) })
     .select().single();
   if (pErr) { console.error('[ACCOUNTS]', pErr.message); return res.status(500).json({ error: 'Error interno' }); }
 

@@ -35,7 +35,7 @@ router.post('/', auth, async (req, res) => {
 
   if (items && items.length) {
     await supabase.from('return_items').insert(
-      items.map(function(i){ return { return_id:ret.id, code:i.code, name:i.name, price:i.price, qty:i.qty }; })
+      items.map(function(i){ return { return_id:ret.id, code:i.code, name:i.name, price:i.price, qty:i.qty, tenant_id: tenantId }; })
     );
   }
 
