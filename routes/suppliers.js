@@ -74,7 +74,7 @@ router.post('/purchases', auth, async (req, res) => {
   if (pErr) return res.status(500).json({ error: 'Error interno al crear compra' });
 
   var rows = items.map(function(it) {
-    return { purchase_id: purchase.id, product_id: it.productId || null, product_name: it.productName, product_code: it.productCode || null, qty: Number(it.qty), cost: Number(it.cost), subtotal: Number(it.subtotal) };
+    return { purchase_id: purchase.id, product_id: it.productId || null, product_name: it.productName, product_code: it.productCode || null, qty: Number(it.qty), cost: Number(it.cost), subtotal: Number(it.subtotal), tenant_id: tenantId };
   });
   var { error: iErr } = await supabase.from('purchase_items').insert(rows);
   if (iErr) return res.status(500).json({ error: 'Error al guardar items' });
