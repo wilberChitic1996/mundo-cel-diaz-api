@@ -16,31 +16,31 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/clients
 router.post('/', auth, async (req, res) => {
-  var { id, cliCode, name, dpi, phone, address, active, createdAt } = req.body;
+  var { id, cliCode, name, dpi, nit, phone, address, email, active, createdAt } = req.body;
   var { data, error } = await supabase
     .from('clients')
-    .insert([{ id, cli_code: cliCode, name, dpi: dpi||null, phone: phone||null, address: address||null, active: active!==false, created_at: createdAt||new Date().toISOString(), tenant_id: tid(req) }])
+    .insert([{ id, cli_code: cliCode, name, dpi: dpi||null, nit: nit||'CF', phone: phone||null, address: address||null, email: email||null, active: active!==false, created_at: createdAt||new Date().toISOString(), tenant_id: tid(req) }])
     .select().single();
   if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
-  await logAudit(req.user, 'cliente_creado', 'client', data.id, { nombre: name, codigo: cliCode, telefono: phone||'—', dpi: dpi||'—' });
+  await logAudit(req.user, 'cliente_creado', 'client', data.id, { nombre: name, codigo: cliCode, nit: nit||'CF', telefono: phone||'—', dpi: dpi||'—' });
   res.status(201).json(data);
 });
 
 // PUT /api/clients/:id
 router.put('/:id', auth, async (req, res) => {
-  var { cliCode, name, dpi, phone, address, active } = req.body;
+  var { cliCode, name, dpi, nit, phone, address, email, active } = req.body;
 
   var { data: before } = await withTenant(supabase.from('clients').select('*').eq('id', req.params.id), req).single();
 
   var { data, error } = await withTenant(
     supabase.from('clients')
-      .update({ cli_code: cliCode, name, dpi: dpi||null, phone: phone||null, address: address||null, active: active!==false, updated_at: new Date() })
+      .update({ cli_code: cliCode, name, dpi: dpi||null, nit: nit||'CF', phone: phone||null, address: address||null, email: email||null, active: active!==false, updated_at: new Date() })
       .eq('id', req.params.id),
     req
   ).select().single();
   if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
 
-  var CAMPOS = { name:'Nombre', dpi:'DPI', phone:'Teléfono', address:'Dirección', active:'Activo' };
+  var CAMPOS = { name:'Nombre', dpi:'DPI', nit:'NIT', phone:'Teléfono', address:'Dirección', email:'Email', active:'Activo' };
   var diff = {};
   if (before) {
     Object.keys(CAMPOS).forEach(function(k){
