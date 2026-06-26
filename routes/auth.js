@@ -12,8 +12,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // Almacén en memoria de códigos 2FA — { email: { code, expires } }
 const twoFaCodes = new Map();
 
+var LEGACY_SALT = process.env.LEGACY_SALT || 'mnpos_salt_2026';
 function legacySha256(password) {
-  return crypto.createHash('sha256').update(password + 'mnpos_salt_2026').digest('hex');
+  return crypto.createHash('sha256').update(password + LEGACY_SALT).digest('hex');
 }
 
 async function hashPassword(password) {
@@ -180,36 +181,48 @@ router.post('/verify-answer', recoveryLimiter, async (req, res) => {
   if (hashAnswer(answer) !== users[0].sec_answer_hash)
     return res.status(401).json({ error: 'Respuesta incorrecta' });
 
-  res.json({ ok: true });
+  // Emitir token de un solo uso válido 15 minutos para el paso de reset
+  var resetToken = jwt.sign(
+    { sub: email.toLowerCase().trim(), purpose: 'password_reset' },
+    process.env.JWT_SECRET,
+    { expiresIn: '15m' }
+  );
+  res.json({ ok: true, resetToken });
 });
 
 // POST /api/auth/reset-password
 router.post('/reset-password', recoveryLimiter, async (req, res) => {
-  const { email, answer, newPassword } = req.body;
-  if (!email || !answer || !newPassword)
+  const { resetToken, newPassword } = req.body;
+  if (!resetToken || !newPassword)
     return res.status(400).json({ error: 'Datos incompletos' });
   if (String(newPassword).length < 8)
     return res.status(400).json({ error: 'La contraseña debe tener mínimo 8 caracteres' });
 
+  var payload;
+  try {
+    payload = jwt.verify(resetToken, process.env.JWT_SECRET);
+  } catch(e) {
+    return res.status(401).json({ error: 'Token inválido o expirado. Volvé a verificar tu respuesta de seguridad.' });
+  }
+  if (payload.purpose !== 'password_reset')
+    return res.status(401).json({ error: 'Token inválido' });
+
+  const email = payload.sub;
   const { data: users, error } = await supabase
     .from('users')
-    .select('id,sec_answer_hash,active')
-    .eq('email', email.toLowerCase().trim())
+    .select('id,active')
+    .eq('email', email)
     .limit(1);
 
   if (error) { console.error('[RESET-PASSWORD]', error.message); return res.status(500).json({ error: 'Error interno' }); }
   if (!users || users.length === 0 || !users[0].active)
     return res.status(404).json({ error: 'Cuenta no encontrada' });
 
-  const user = users[0];
-  if (!user.sec_answer_hash || hashAnswer(answer) !== user.sec_answer_hash)
-    return res.status(401).json({ error: 'Respuesta de seguridad incorrecta' });
-
   const newHash = await hashPassword(newPassword);
   const { error: updErr } = await supabase
     .from('users')
     .update({ password_hash: newHash, updated_at: new Date() })
-    .eq('id', user.id);
+    .eq('id', users[0].id);
 
   if (updErr) {
     console.error('[RESET-PASSWORD]', updErr.message);

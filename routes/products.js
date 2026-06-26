@@ -14,6 +14,8 @@ router.get('/', auth, async (req, res) => {
   res.json(data);
 });
 
+var PRODUCT_FIELDS = ['name','price','cost','stock','min_stock','unit','category','shelf','category_id','location_id','position','description','active'];
+
 // POST /api/products
 router.post('/', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
@@ -21,7 +23,9 @@ router.post('/', auth, async (req, res) => {
   var { data: codeData, error: codeError } = await supabase.rpc('generate_product_code');
   if (codeError) { console.error('[PRODUCTS]', codeError.message); return res.status(500).json({ error: 'Error generando código' }); }
 
-  var productData = Object.assign({}, req.body, { code: codeData, tenant_id: tid(req) });
+  var body = {};
+  PRODUCT_FIELDS.forEach(function(f){ if (req.body[f] !== undefined) body[f] = req.body[f]; });
+  var productData = Object.assign(body, { code: codeData, tenant_id: tid(req) });
 
   var { data, error } = await supabase
     .from('products').insert(productData).select().single();
@@ -37,8 +41,10 @@ router.put('/:id', auth, async (req, res) => {
   var q = supabase.from('products').select('*').eq('id', req.params.id);
   var { data: before } = await withTenant(q, req).single();
 
+  var body = {};
+  PRODUCT_FIELDS.forEach(function(f){ if (req.body[f] !== undefined) body[f] = req.body[f]; });
   var upd = withTenant(
-    supabase.from('products').update(Object.assign({}, req.body, { updated_at: new Date() })).eq('id', req.params.id),
+    supabase.from('products').update(Object.assign(body, { updated_at: new Date() })).eq('id', req.params.id),
     req
   );
   var { data, error } = await upd.select().single();
