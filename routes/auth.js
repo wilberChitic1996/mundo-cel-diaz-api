@@ -65,24 +65,38 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
   await supabase.from('users').update(updateFields).eq('id', user.id);
 
-  if (user.role === 'superadmin') {
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    twoFaCodes.set(user.email, { code, expires: Date.now() + 10 * 60 * 1000 });
-    try {
-      await resend.emails.send({
-        from: 'PraxisGT <noreply@mundoceldiaz.com>',
-        to: user.email,
-        subject: 'Tu código de verificación — PraxisGT',
-        html: `<p>Hola <b>${user.name}</b>,</p><p>Tu código de acceso es:</p><h1 style="letter-spacing:8px;font-size:40px;">${code}</h1><p>Válido por <b>10 minutos</b>. Si no fuiste tú, cambiá tu contraseña inmediatamente.</p>`
-      });
-    } catch(emailErr) {
-      console.error('[SECURITY] Error enviando 2FA a superadmin:', emailErr.message);
-      twoFaCodes.delete(user.email);
-      return res.status(500).json({ error: 'Error enviando código 2FA. Intentá de nuevo.' });
-    }
-    console.info('[SECURITY] 2FA enviado a superadmin:', user.email, '| IP:', req.ip);
-    return res.json({ requires2fa: true, email: user.email });
-  }
+  // ══════════════════════════════════════════════════════════════════
+  // 2FA SUPERADMIN — DESHABILITADO: dominio mundoceldiaz.com pendiente
+  // de verificación en Resend. Sin eso los emails no salen y el login
+  // del superadmin quedaría bloqueado por completo.
+  //
+  // PARA REACTIVAR (cuando Resend esté listo):
+  //   1. Verificar mundoceldiaz.com en https://resend.com/domains
+  //   2. Descomentar el bloque de abajo
+  //   3. Probar en piloto: login superadmin → llega código al email
+  //   4. Mergear a producción
+  //
+  // SUGERENCIA A FUTURO: migrar a TOTP (Google Authenticator / Authy)
+  // con la librería 'otplib' — no depende de email y es más seguro.
+  // ══════════════════════════════════════════════════════════════════
+  // if (user.role === 'superadmin') {
+  //   const code = String(Math.floor(100000 + Math.random() * 900000));
+  //   twoFaCodes.set(user.email, { code, expires: Date.now() + 10 * 60 * 1000 });
+  //   try {
+  //     await resend.emails.send({
+  //       from: 'PraxisGT <noreply@mundoceldiaz.com>',
+  //       to: user.email,
+  //       subject: 'Tu código de verificación — PraxisGT',
+  //       html: `<p>Hola <b>${user.name}</b>,</p><p>Tu código de acceso es:</p><h1 style="letter-spacing:8px;font-size:40px;">${code}</h1><p>Válido por <b>10 minutos</b>. Si no fuiste vos, cambiá tu contraseña inmediatamente.</p>`
+  //     });
+  //   } catch(emailErr) {
+  //     console.error('[SECURITY] Error enviando 2FA a superadmin:', emailErr.message);
+  //     twoFaCodes.delete(user.email);
+  //     return res.status(500).json({ error: 'Error enviando código 2FA. Intentá de nuevo.' });
+  //   }
+  //   console.info('[SECURITY] 2FA enviado a superadmin:', user.email, '| IP:', req.ip);
+  //   return res.json({ requires2fa: true, email: user.email });
+  // }
 
   const token = jwt.sign(
     {
