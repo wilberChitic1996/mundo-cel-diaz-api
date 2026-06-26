@@ -13,9 +13,15 @@ var allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(function(u) { return u.trim(); })
   : [];
 app.use(cors({
-  origin: allowedOrigins.length === 0
-    ? false
-    : function(origin, cb) { cb(null, !origin || allowedOrigins.includes(origin)); },
+  origin: function(origin, cb) {
+    // Permitir requests sin origen (Postman, curl, server-to-server)
+    if (!origin) return cb(null, true);
+    // Orígenes explícitos desde FRONTEND_URL env var
+    if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) return cb(null, true);
+    // Permitir todos los dominios de Vercel (staging y PR previews)
+    if (origin.endsWith('.vercel.app')) return cb(null, true);
+    cb(new Error('CORS no permitido: ' + origin));
+  },
   credentials: true
 }));
 app.use(generalLimiter);
