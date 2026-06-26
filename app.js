@@ -11,9 +11,11 @@ app.use(helmet());
 
 var allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(function(u) { return u.trim(); })
-  : ['*'];
+  : [];
 app.use(cors({
-  origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
+  origin: allowedOrigins.length === 0
+    ? false
+    : function(origin, cb) { cb(null, !origin || allowedOrigins.includes(origin)); },
   credentials: true
 }));
 app.use(generalLimiter);
