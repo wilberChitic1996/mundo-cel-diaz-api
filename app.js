@@ -81,6 +81,7 @@ var routes = {
   categories: require('./routes/categories'),
   locations:  require('./routes/locations'),
   admin:      require('./routes/admin'),
+  reminders:  require('./routes/reminders'),
 };
 
 Object.keys(routes).forEach(function(name) {
