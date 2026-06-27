@@ -249,14 +249,14 @@ router.delete('/tenants/:id', auth, superadminOnly, async (req, res) => {
     if (parentIds && parentIds.length) {
       var ids = parentIds.map(function(r){ return r.id; });
       var { error: cdErr } = await supabase.from(cd.child).delete().in(cd.fkCol, ids);
-      if (cdErr) { logger.error({ err: '[ADMIN] Error al eliminar', cd.child, cdErr.message); deleteErrors.push(cd.child); }
+      if (cdErr) { logger.error({ err: cdErr }, '[ADMIN] Error al eliminar ' + cd.child); deleteErrors.push(cd.child); }
     }
   }
 
   // 2. Borrar tablas directas
   for (var table of directTables) {
     var { error: tErr } = await supabase.from(table).delete().eq('tenant_id', id);
-    if (tErr) { logger.error({ err: '[ADMIN] Error al eliminar tabla', table, 'tenant', id, tErr.message); deleteErrors.push(table); }
+    if (tErr) { logger.error({ err: tErr }, '[ADMIN] Error al eliminar tabla ' + table); deleteErrors.push(table); }
   }
 
   if (deleteErrors.length > 0) return res.status(500).json({ error: 'Fallo al eliminar tablas: ' + deleteErrors.join(', ') });

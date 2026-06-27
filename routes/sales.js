@@ -79,7 +79,7 @@ router.post('/', auth, async (req, res) => {
       items.map(function(i){ return { sale_id:sale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (siErr) {
-      logger.error({ err: '[SALES] sale_items insert failed for sale', sale.id, siErr.message);
+      logger.error('[SALES] sale_items insert failed for sale');
       await supabase.from('sales').delete().eq('id', sale.id);
       return res.status(500).json({ error: 'Error al guardar ítems de venta' });
     }
@@ -91,7 +91,7 @@ router.post('/', auth, async (req, res) => {
           p_qty: item.qty,
           p_tenant_id: tenantId
         });
-        if (rpcErr) logger.error({ err: '[SALES] decrement_stock RPC error para producto', item.id, rpcErr.message);
+        if (rpcErr) logger.error({ err: rpcErr }, '[SALES] decrement_stock RPC error para producto ' + item.id);
       }
     }
 
@@ -120,7 +120,7 @@ router.post('/', auth, async (req, res) => {
       items.map(function(i){ return { sale_id:creditSale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (csiErr) {
-      logger.error({ err: '[SALES] sale_items (credit) insert failed for sale', creditSale.id, csiErr.message);
+      logger.error('[SALES] sale_items (credit) insert failed for sale');
       await supabase.from('sales').delete().eq('id', creditSale.id);
       return res.status(500).json({ error: 'Error al guardar ítems de venta' });
     }
@@ -148,7 +148,7 @@ router.post('/', auth, async (req, res) => {
           p_qty: item2.qty,
           p_tenant_id: tenantId
         });
-        if (rpcErr2) logger.error({ err: '[SALES] decrement_stock RPC error para producto', item2.id, rpcErr2.message);
+        if (rpcErr2) logger.error({ err: rpcErr2 }, '[SALES] decrement_stock RPC error para producto ' + item2.id);
       }
     }
 
