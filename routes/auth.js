@@ -13,6 +13,16 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // Almacén en memoria de códigos 2FA — { email: { code, expires } }
 const twoFaCodes = new Map();
 
+var REFRESH_TOKEN_EXPIRY_DAYS = 30;
+
+async function issueRefreshToken(userId, tenantId) {
+  var raw   = crypto.randomBytes(48).toString('hex');
+  var hash  = crypto.createHash('sha256').update(raw).digest('hex');
+  var exp   = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  await supabase.from('refresh_tokens').insert({ user_id: userId, tenant_id: tenantId, token_hash: hash, expires_at: exp.toISOString() });
+  return raw;
+}
+
 var LEGACY_SALT = process.env.LEGACY_SALT || 'mnpos_salt_2026';
 function legacySha256(password) {
   return crypto.createHash('sha256').update(password + LEGACY_SALT).digest('hex');
@@ -111,9 +121,11 @@ router.post('/login', loginLimiter, async (req, res) => {
     { expiresIn: '8h' }
   );
 
+  var refreshToken = await issueRefreshToken(user.id, user.tenant_id);
   logger.info({ email: user.email, role: user.role, ip: req.ip }, '[SECURITY] Login exitoso');
   res.json({
     token,
+    refreshToken,
     user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null }
   });
 });
@@ -146,13 +158,56 @@ router.post('/verify-2fa', loginLimiter, async (req, res) => {
     { expiresIn: '8h' }
   );
 
+  var refreshToken2fa = await issueRefreshToken(user.id, user.tenant_id);
   logger.info({ email: user.email, ip: req.ip }, '[SECURITY] 2FA verificado — login superadmin exitoso');
-  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null } });
+  res.json({ token, refreshToken: refreshToken2fa, user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null } });
 });
 
 // GET /api/auth/me
 router.get('/me', require('../middleware/auth'), (req, res) => {
   res.json({ user: req.user });
+});
+
+// POST /api/auth/refresh
+router.post('/refresh', async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(400).json({ error: 'Refresh token requerido' });
+
+  var hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  var { data: row, error } = await supabase
+    .from('refresh_tokens')
+    .select('*, users(*)')
+    .eq('token_hash', hash)
+    .is('revoked_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .single();
+
+  if (error || !row) return res.status(401).json({ error: 'Refresh token inválido o expirado' });
+
+  var user = row.users;
+  if (!user || !user.active) return res.status(401).json({ error: 'Usuario inactivo' });
+
+  // Rotar: revocar el token anterior y emitir uno nuevo
+  await supabase.from('refresh_tokens').update({ revoked_at: new Date().toISOString() }).eq('id', row.id);
+  var newRefreshToken = await issueRefreshToken(user.id, user.tenant_id);
+
+  var token = jwt.sign(
+    { userId: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null },
+    process.env.JWT_SECRET,
+    { expiresIn: '8h' }
+  );
+
+  res.json({ token, refreshToken: newRefreshToken });
+});
+
+// POST /api/auth/logout
+router.post('/logout', async (req, res) => {
+  const { refreshToken } = req.body;
+  if (refreshToken) {
+    var hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    await supabase.from('refresh_tokens').update({ revoked_at: new Date().toISOString() }).eq('token_hash', hash);
+  }
+  res.json({ ok: true });
 });
 
 /* ══════════════════════════════════════════════════════════════════
