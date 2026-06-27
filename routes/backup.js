@@ -113,4 +113,33 @@ router.get('/:id/download', auth, async function(req, res) {
   }
 });
 
+// GET /api/backup/:id/data — devuelve el JSON del backup directamente (evita CORS de Storage)
+router.get('/:id/data', auth, async function(req, res) {
+  var tenantId = tid(req);
+  if (!tenantId) return res.status(403).json({ error: 'Tenant requerido' });
+
+  try {
+    var { data, error } = await supabase
+      .from('backups')
+      .select('id, storage_path, status')
+      .eq('id', req.params.id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (error || !data) return res.status(404).json({ error: 'Backup no encontrado' });
+    if (data.status !== 'success') return res.status(400).json({ error: 'Backup no disponible' });
+    if (!data.storage_path) return res.status(400).json({ error: 'Sin archivo de almacenamiento' });
+
+    var downloadRes = await supabase.storage.from('backups').download(data.storage_path);
+    if (downloadRes.error) return res.status(500).json({ error: 'Error leyendo archivo de backup' });
+
+    var text = await downloadRes.data.text();
+    var parsed = JSON.parse(text);
+    res.json(parsed);
+  } catch (err) {
+    logger.error({ err, tenant_id: tenantId, backup_id: req.params.id }, '[BACKUP] Error sirviendo datos de backup');
+    res.status(500).json({ error: 'Error al obtener datos del backup' });
+  }
+});
+
 module.exports = router;
