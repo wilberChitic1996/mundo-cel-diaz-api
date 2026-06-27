@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
@@ -31,7 +32,7 @@ router.put('/', auth, async (req, res) => {
     .upsert(rows, { onConflict: 'tenant_id,key' });
 
   if (error) {
-    console.error('[SETTINGS] upsert error:', error.message);
+    logger.error({ err: error }, '[SETTINGS] upsert error:');
     return res.status(500).json({ error: 'Error interno al guardar configuración' });
   }
 

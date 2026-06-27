@@ -3,6 +3,7 @@ const express = require('express');
 const cors    = require('cors');
 const helmet  = require('helmet');
 const { generalLimiter } = require('./middleware/rateLimit');
+const logger = require('./utils/logger');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -54,7 +55,7 @@ app.get('/health', function(req, res) {
 app.use(function(req, res) { res.status(404).json({ error:'Ruta no encontrada' }); });
 
 app.use(function(err, req, res, _next) {
-  console.error('[ERROR]', err.message);
+  logger.error({ err, method: req.method, url: req.url }, 'Error interno del servidor');
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 

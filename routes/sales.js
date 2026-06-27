@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express   = require('express');
 const router    = express.Router();
 const auth      = require('../middleware/auth');
@@ -10,7 +11,7 @@ router.get('/', auth, async (req, res) => {
   var q = supabase.from('sales').select('*, sale_items(*)').order('created_at', { ascending: false });
   q = withTenant(q, req);
   var { data, error } = await q;
-  if (error) { console.error('[SALES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[SALES]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -62,13 +63,13 @@ router.post('/', auth, async (req, res) => {
     if (nota) insertData.nota = nota;
 
     var { data: sale, error: sErr } = await supabase.from('sales').insert(insertData).select().single();
-    if (sErr) { console.error('[SALES]', sErr.message); return res.status(500).json({ error: 'Error interno' }); }
+    if (sErr) { logger.error({ err: sErr }, '[SALES]'); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: siErr } = await supabase.from('sale_items').insert(
       items.map(function(i){ return { sale_id:sale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (siErr) {
-      console.error('[SALES] sale_items insert failed for sale', sale.id, siErr.message);
+      logger.error({ err: '[SALES] sale_items insert failed for sale', sale.id, siErr.message);
       await supabase.from('sales').delete().eq('id', sale.id);
       return res.status(500).json({ error: 'Error al guardar ítems de venta' });
     }
@@ -80,7 +81,7 @@ router.post('/', auth, async (req, res) => {
           p_qty: item.qty,
           p_tenant_id: tenantId
         });
-        if (rpcErr) console.error('[SALES] decrement_stock RPC error para producto', item.id, rpcErr.message);
+        if (rpcErr) logger.error({ err: '[SALES] decrement_stock RPC error para producto', item.id, rpcErr.message);
       }
     }
 
@@ -103,13 +104,13 @@ router.post('/', auth, async (req, res) => {
     };
     if (nota) saleInsert2.nota = nota;
     var { data: creditSale, error: csErr } = await supabase.from('sales').insert(saleInsert2).select().single();
-    if (csErr) { console.error('[SALES credit]', csErr.message); return res.status(500).json({ error: 'Error interno' }); }
+    if (csErr) { logger.error({ err: csErr }, '[SALES credit]'); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: csiErr } = await supabase.from('sale_items').insert(
       items.map(function(i){ return { sale_id:creditSale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (csiErr) {
-      console.error('[SALES] sale_items (credit) insert failed for sale', creditSale.id, csiErr.message);
+      logger.error({ err: '[SALES] sale_items (credit) insert failed for sale', creditSale.id, csiErr.message);
       await supabase.from('sales').delete().eq('id', creditSale.id);
       return res.status(500).json({ error: 'Error al guardar ítems de venta' });
     }
@@ -118,7 +119,7 @@ router.post('/', auth, async (req, res) => {
     if (idempotencyKey) accInsert.idempotency_key = idempotencyKey;
 
     var { data: acc, error: aErr } = await supabase.from('accounts').insert(accInsert).select().single();
-    if (aErr) { console.error('[SALES]', aErr.message); return res.status(500).json({ error: 'Error interno' }); }
+    if (aErr) { logger.error({ err: aErr }, '[SALES]'); return res.status(500).json({ error: 'Error interno' }); }
 
     await supabase.from('account_items').insert(
       items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty, tenant_id:tenantId }; })
@@ -137,7 +138,7 @@ router.post('/', auth, async (req, res) => {
           p_qty: item2.qty,
           p_tenant_id: tenantId
         });
-        if (rpcErr2) console.error('[SALES] decrement_stock RPC error para producto', item2.id, rpcErr2.message);
+        if (rpcErr2) logger.error({ err: '[SALES] decrement_stock RPC error para producto', item2.id, rpcErr2.message);
       }
     }
 

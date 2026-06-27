@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express   = require('express');
 const router    = express.Router();
 const auth      = require('../middleware/auth');
@@ -10,7 +11,7 @@ router.get('/', auth, async (req, res) => {
   var q = supabase.from('accounts').select('*, account_items(*), account_payments(*)').order('created_at', { ascending: false });
   q = withTenant(q, req);
   var { data, error } = await q;
-  if (error) { console.error('[ACCOUNTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[ACCOUNTS]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -22,7 +23,7 @@ router.post('/', auth, async (req, res) => {
     .from('accounts')
     .insert({ client, total, paid:paid||0, balance:balance||total, status:status||'pendiente', method:method||'Efectivo', user_id:req.user.userId, registrado_por: registradoPor, tenant_id: tid(req) })
     .select().single();
-  if (error) { console.error('[ACCOUNTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[ACCOUNTS]'); return res.status(500).json({ error: 'Error interno' }); }
   if (items && items.length) {
     await supabase.from('account_items').insert(
       items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty, tenant_id: tid(req) }; })
@@ -45,7 +46,7 @@ router.post('/:id/payments', auth, async (req, res) => {
     .from('account_payments')
     .insert({ account_id:req.params.id, amount, method:method||'Efectivo', note:note||'', registrado_por: registradoPor, tenant_id: tid(req) })
     .select().single();
-  if (pErr) { console.error('[ACCOUNTS]', pErr.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (pErr) { logger.error({ err: pErr }, '[ACCOUNTS]'); return res.status(500).json({ error: 'Error interno' }); }
 
   var { data: pmts } = await supabase.from('account_payments').select('amount').eq('account_id', req.params.id);
   var totalPaid  = (pmts||[]).reduce(function(s,p){return s+Number(p.amount);},0);

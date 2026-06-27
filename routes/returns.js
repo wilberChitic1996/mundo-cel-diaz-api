@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
@@ -10,7 +11,7 @@ router.get('/', auth, async (req, res) => {
   var q = supabase.from('returns').select('*, return_items(*)').order('created_at', { ascending: false });
   q = withTenant(q, req);
   const { data, error } = await q;
-  if (error) { console.error('[RETURNS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[RETURNS]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -31,7 +32,7 @@ router.post('/', auth, async (req, res) => {
       item_condition: itemCondition||'bueno',
       total, user_id: req.user.userId, tenant_id: tenantId })
     .select().single();
-  if (error) { console.error('[RETURNS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[RETURNS]'); return res.status(500).json({ error: 'Error interno' }); }
 
   if (items && items.length) {
     await supabase.from('return_items').insert(

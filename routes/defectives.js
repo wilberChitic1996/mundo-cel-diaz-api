@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
@@ -10,7 +11,7 @@ router.get('/', auth, async (req, res) => {
   var q = supabase.from('defectives').select('*').order('created_at', { ascending: false });
   q = withTenant(q, req);
   const { data, error } = await q;
-  if (error) { console.error('[DEFECTIVES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[DEFECTIVES]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -32,7 +33,7 @@ router.put('/:id', auth, async (req, res) => {
     supabase.from('defectives').update({ status: status, updated_at: new Date() }).eq('id', req.params.id),
     req
   ).select().single();
-  if (error) { console.error('[DEFECTIVES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[DEFECTIVES]'); return res.status(500).json({ error: 'Error interno' }); }
 
   await logAudit(req.user, 'defectuoso_estado', 'defective', req.params.id, {
     _articulo: def ? (def.name||def.code||req.params.id) : req.params.id,

@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
 const jwt      = require('jsonwebtoken');
@@ -46,7 +47,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     .limit(1);
 
   if (error || !users || users.length === 0) {
-    console.warn('[SECURITY] Login fallido — email no encontrado:', email.toLowerCase().trim(), '| IP:', req.ip, '| UA:', req.headers['user-agent']);
+    logger.warn('[SECURITY] Login fallido — email no encontrado:', email.toLowerCase().trim(), '| IP:', req.ip, '| UA:', req.headers['user-agent']);
     return res.status(401).json({ error: 'Credenciales incorrectas' });
   }
 
@@ -54,7 +55,7 @@ router.post('/login', loginLimiter, async (req, res) => {
   const valid = await verifyPassword(password, user.password_hash);
 
   if (!valid) {
-    console.warn('[SECURITY] Login fallido — contraseña incorrecta:', email.toLowerCase().trim(), '| IP:', req.ip, '| UA:', req.headers['user-agent']);
+    logger.warn('[SECURITY] Login fallido — contraseña incorrecta:', email.toLowerCase().trim(), '| IP:', req.ip, '| UA:', req.headers['user-agent']);
     return res.status(401).json({ error: 'Credenciales incorrectas' });
   }
 
@@ -90,7 +91,7 @@ router.post('/login', loginLimiter, async (req, res) => {
   //       html: `<p>Hola <b>${user.name}</b>,</p><p>Tu código de acceso es:</p><h1 style="letter-spacing:8px;font-size:40px;">${code}</h1><p>Válido por <b>10 minutos</b>. Si no fuiste vos, cambiá tu contraseña inmediatamente.</p>`
   //     });
   //   } catch(emailErr) {
-  //     console.error('[SECURITY] Error enviando 2FA a superadmin:', emailErr.message);
+  //     logger.error({ err: emailErr }, '[SECURITY] Error enviando 2FA a superadmin:');
   //     twoFaCodes.delete(user.email);
   //     return res.status(500).json({ error: 'Error enviando código 2FA. Intentá de nuevo.' });
   //   }
@@ -110,7 +111,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     { expiresIn: '8h' }
   );
 
-  console.info('[SECURITY] Login exitoso:', user.email, '| rol:', user.role, '| IP:', req.ip);
+  logger.info({ email: user.email, role: user.role, ip: req.ip }, '[SECURITY] Login exitoso');
   res.json({
     token,
     user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null }
@@ -129,7 +130,7 @@ router.post('/verify-2fa', loginLimiter, async (req, res) => {
     return res.status(401).json({ error: 'El código expiró. Iniciá sesión nuevamente.' });
   }
   if (entry.code !== String(code).trim()) {
-    console.warn('[SECURITY] 2FA código incorrecto para:', email, '| IP:', req.ip);
+    logger.warn('[SECURITY] 2FA código incorrecto para:', email, '| IP:', req.ip);
     return res.status(401).json({ error: 'Código incorrecto' });
   }
 
@@ -145,7 +146,7 @@ router.post('/verify-2fa', loginLimiter, async (req, res) => {
     { expiresIn: '8h' }
   );
 
-  console.info('[SECURITY] 2FA verificado — login superadmin exitoso:', user.email, '| IP:', req.ip);
+  logger.info({ email: user.email, ip: req.ip }, '[SECURITY] 2FA verificado — login superadmin exitoso');
   res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant_id: user.tenant_id || null } });
 });
 
@@ -169,7 +170,7 @@ router.post('/find-user', recoveryLimiter, async (req, res) => {
     .eq('email', email.toLowerCase().trim())
     .limit(1);
 
-  if (error) { console.error('[FIND-USER]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[FIND-USER]'); return res.status(500).json({ error: 'Error interno' }); }
   if (!users || users.length === 0 || !users[0].active)
     return res.status(404).json({ error: 'No se encontró una cuenta activa con ese email' });
 
@@ -190,7 +191,7 @@ router.post('/verify-answer', recoveryLimiter, async (req, res) => {
     .eq('email', email.toLowerCase().trim())
     .limit(1);
 
-  if (error) { console.error('[VERIFY-ANSWER]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[VERIFY-ANSWER]'); return res.status(500).json({ error: 'Error interno' }); }
   if (!users || users.length === 0 || !users[0].active)
     return res.status(404).json({ error: 'Cuenta no encontrada' });
   if (!users[0].sec_answer_hash)
@@ -232,7 +233,7 @@ router.post('/reset-password', recoveryLimiter, async (req, res) => {
     .eq('email', email)
     .limit(1);
 
-  if (error) { console.error('[RESET-PASSWORD]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[RESET-PASSWORD]'); return res.status(500).json({ error: 'Error interno' }); }
   if (!users || users.length === 0 || !users[0].active)
     return res.status(404).json({ error: 'Cuenta no encontrada' });
 
@@ -243,7 +244,7 @@ router.post('/reset-password', recoveryLimiter, async (req, res) => {
     .eq('id', users[0].id);
 
   if (updErr) {
-    console.error('[RESET-PASSWORD]', updErr.message);
+    logger.error({ err: updErr }, '[RESET-PASSWORD]');
     return res.status(500).json({ error: 'Error al actualizar la contraseña' });
   }
 

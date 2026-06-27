@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
@@ -10,7 +11,7 @@ router.get('/', auth, async (req, res) => {
   var q = supabase.from('clients').select('*').order('created_at', { ascending: false });
   q = withTenant(q, req);
   var { data, error } = await q;
-  if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[CLIENTS]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data || []);
 });
 
@@ -21,7 +22,7 @@ router.post('/', auth, async (req, res) => {
     .from('clients')
     .insert([{ id, cli_code: cliCode, name, dpi: dpi||null, nit: nit||'CF', phone: phone||null, address: address||null, email: email||null, active: active!==false, created_at: createdAt||new Date().toISOString(), tenant_id: tid(req) }])
     .select().single();
-  if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[CLIENTS]'); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'cliente_creado', 'client', data.id, { nombre: name, codigo: cliCode, nit: nit||'CF', telefono: phone||'—', dpi: dpi||'—' });
   res.status(201).json(data);
 });
@@ -38,7 +39,7 @@ router.put('/:id', auth, async (req, res) => {
       .eq('id', req.params.id),
     req
   ).select().single();
-  if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[CLIENTS]'); return res.status(500).json({ error: 'Error interno' }); }
 
   var CAMPOS = { name:'Nombre', dpi:'DPI', nit:'NIT', phone:'Teléfono', address:'Dirección', email:'Email', active:'Activo' };
   var diff = {};
@@ -59,7 +60,7 @@ router.put('/:id', auth, async (req, res) => {
 router.delete('/:id', auth, async (req, res) => {
   var { data: before } = await withTenant(supabase.from('clients').select('name,cli_code').eq('id', req.params.id), req).single();
   var { error } = await withTenant(supabase.from('clients').update({ active: false, updated_at: new Date() }).eq('id', req.params.id), req);
-  if (error) { console.error('[CLIENTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[CLIENTS]'); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'cliente_eliminado', 'client', req.params.id, { nombre: before ? before.name : '—', codigo: before ? before.cli_code : '—' });
   res.json({ success: true });
 });

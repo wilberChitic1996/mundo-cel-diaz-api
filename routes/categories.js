@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
@@ -15,7 +16,7 @@ router.get('/', auth, async (req, res) => {
     .order('sort_order').order('name');
   q = withTenant(q, req);
   var { data, error } = await q;
-  if (error) { console.error('[CATEGORIES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[CATEGORIES]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data || []);
 });
 
@@ -36,7 +37,7 @@ router.post('/', auth, async (req, res) => {
     .select().single();
   if (error) {
     if (error.code === '23505') return res.status(409).json({ error: 'Ya existe una categoría con ese nombre' });
-    console.error('[CATEGORIES]', error.message); return res.status(500).json({ error: 'Error interno' });
+    logger.error({ err: error }, '[CATEGORIES]'); return res.status(500).json({ error: 'Error interno' });
   }
   await logAudit(req.user, 'categoria_creada', 'category', data.id, { nombre: name });
   res.status(201).json(data);
@@ -64,7 +65,7 @@ router.put('/:id', auth, async (req, res) => {
   var { data, error } = await withTenant(supabase.from('categories').update(updates).eq('id', req.params.id), req).select().single();
   if (error) {
     if (error.code === '23505') return res.status(409).json({ error: 'Ya existe una categoría con ese nombre' });
-    console.error('[CATEGORIES]', error.message); return res.status(500).json({ error: 'Error interno' });
+    logger.error({ err: error }, '[CATEGORIES]'); return res.status(500).json({ error: 'Error interno' });
   }
   await logAudit(req.user, 'categoria_editada', 'category', req.params.id, updates);
   res.json(data);
@@ -79,7 +80,7 @@ router.delete('/:id', auth, async (req, res) => {
 
   var { data: before } = await withTenant(supabase.from('categories').select('name').eq('id', req.params.id), req).single();
   var { error } = await withTenant(supabase.from('categories').update({ active: false, updated_at: new Date() }).eq('id', req.params.id), req);
-  if (error) { console.error('[CATEGORIES]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[CATEGORIES]'); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'categoria_eliminada', 'category', req.params.id, { nombre: before ? before.name : '—' });
   res.json({ success: true });
 });

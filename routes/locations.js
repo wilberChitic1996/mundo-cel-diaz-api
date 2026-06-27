@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
@@ -15,7 +16,7 @@ router.get('/', auth, async (req, res) => {
     .order('sort_order').order('name');
   q = withTenant(q, req);
   var { data, error } = await q;
-  if (error) { console.error('[LOCATIONS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[LOCATIONS]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data || []);
 });
 
@@ -35,7 +36,7 @@ router.post('/', auth, async (req, res) => {
     .select().single();
   if (error) {
     if (error.code === '23505') return res.status(409).json({ error: 'Ya existe una ubicación con ese nombre' });
-    console.error('[LOCATIONS]', error.message); return res.status(500).json({ error: 'Error interno' });
+    logger.error({ err: error }, '[LOCATIONS]'); return res.status(500).json({ error: 'Error interno' });
   }
   await logAudit(req.user, 'ubicacion_creada', 'location', data.id, { nombre: name });
   res.status(201).json(data);
@@ -62,7 +63,7 @@ router.put('/:id', auth, async (req, res) => {
   var { data, error } = await withTenant(supabase.from('locations').update(updates).eq('id', req.params.id), req).select().single();
   if (error) {
     if (error.code === '23505') return res.status(409).json({ error: 'Ya existe una ubicación con ese nombre' });
-    console.error('[LOCATIONS]', error.message); return res.status(500).json({ error: 'Error interno' });
+    logger.error({ err: error }, '[LOCATIONS]'); return res.status(500).json({ error: 'Error interno' });
   }
   await logAudit(req.user, 'ubicacion_editada', 'location', req.params.id, updates);
   res.json(data);
@@ -77,7 +78,7 @@ router.delete('/:id', auth, async (req, res) => {
 
   var { data: before } = await withTenant(supabase.from('locations').select('name').eq('id', req.params.id), req).single();
   var { error } = await withTenant(supabase.from('locations').update({ active: false, updated_at: new Date() }).eq('id', req.params.id), req);
-  if (error) { console.error('[LOCATIONS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[LOCATIONS]'); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'ubicacion_eliminada', 'location', req.params.id, { nombre: before ? before.name : '—' });
   res.json({ success: true });
 });
@@ -108,7 +109,7 @@ router.put('/move-product/:productId', auth, async (req, res) => {
     supabase.from('products').update({ location_id: location_id || null, position: position || null, updated_at: new Date() }).eq('id', req.params.productId),
     req
   ).select().single();
-  if (error) { console.error('[LOCATIONS:move]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[LOCATIONS:move]'); return res.status(500).json({ error: 'Error interno' }); }
 
   await logAudit(req.user, 'producto_movido', 'product', req.params.productId, {
     _producto: prod.name,
