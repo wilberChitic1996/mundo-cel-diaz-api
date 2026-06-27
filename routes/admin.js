@@ -290,6 +290,51 @@ router.delete('/users/:id', auth, superadminOnly, async (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/admin/storage-stats — estadísticas de almacenamiento (superadmin only)
+router.get('/storage-stats', auth, superadminOnly, async (req, res) => {
+  var TABLES = ['clients', 'products', 'sales', 'sale_items', 'audit_logs', 'repairs', 'warranties', 'accounts'];
+
+  try {
+    var results = await Promise.all(
+      TABLES.map(function(table) {
+        return supabase.from(table).select('*', { count: 'exact', head: true })
+          .then(function(r) { return { table, count: r.count || 0, error: r.error }; });
+      })
+    );
+
+    var tables = {};
+    var total = 0;
+    for (var r of results) {
+      if (r.error) {
+        logger.warn({ table: r.table, err: r.error }, '[ADMIN] storage-stats: error contando tabla');
+        tables[r.table] = null;
+      } else {
+        tables[r.table] = r.count;
+        total += r.count;
+      }
+    }
+
+    // Niveles de alerta: ok < 300 000, warning < 500 000, critical >= 500 000
+    var audit_count = tables['audit_logs'] || 0;
+    var warning_level = 'ok';
+    var message = 'Almacenamiento dentro de límites normales.';
+
+    if (total >= 500000 || audit_count >= 100000) {
+      warning_level = 'critical';
+      message = 'Almacenamiento crítico: ' + total.toLocaleString() + ' registros totales (audit_logs: ' + audit_count.toLocaleString() + '). Considera limpiar logs antiguos o actualizar el plan de Supabase.';
+    } else if (total >= 300000 || audit_count >= 50000) {
+      warning_level = 'warning';
+      message = 'Almacenamiento elevado: ' + total.toLocaleString() + ' registros totales. Monitorear de cerca.';
+    }
+
+    logger.info({ total, warning_level }, '[ADMIN] storage-stats consultado');
+    res.json({ tables, total_records: total, warning_level, message });
+  } catch (err) {
+    logger.error({ err }, '[ADMIN] storage-stats excepción');
+    res.status(500).json({ error: 'Error interno al obtener estadísticas de almacenamiento' });
+  }
+});
+
 // GET /api/admin/subscription — verifica suscripción del tenant actual (para el frontend)
 router.get('/subscription', auth, async (req, res) => {
   if (!req.user.tenant_id) return res.json({ ok: true, daysLeft: null });
