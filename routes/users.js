@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express   = require('express');
 const router    = express.Router();
 const auth      = require('../middleware/auth');
@@ -15,13 +16,23 @@ function hashAnswer(answer) {
   return crypto.createHash('sha256').update(String(answer).trim().toLowerCase() + 'mnpos_salt_2026').digest('hex');
 }
 
+/**
+ * @openapi
+ * /users:
+ *   get:
+ *     tags: [Users]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // GET /api/users
 router.get('/', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
   var q = supabase.from('users').select('id,name,email,role,active,last_login,created_at,sec_question').order('name');
   q = withTenant(q, req);
   const { data, error } = await q;
-  if (error) { console.error('[USERS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[USERS]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data);
 });
 
@@ -45,7 +56,7 @@ router.post('/', auth, async (req, res) => {
     .from('users')
     .insert(row)
     .select('id,name,email,role,active,sec_question').single();
-  if (error) { console.error('[USERS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[USERS]'); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'usuario_creado', 'user', data.id, { name: data.name, email: data.email, role: data.role });
   res.status(201).json(data);
 });
@@ -70,7 +81,7 @@ router.put('/:id', auth, async (req, res) => {
     supabase.from('users').update(updates).eq('id', req.params.id),
     req
   ).select('id,name,email,role,active,sec_question').single();
-  if (error) { console.error('[USERS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[USERS]'); return res.status(500).json({ error: 'Error interno' }); }
 
   var CAMPOS_U = { name:'Nombre', email:'Email', role:'Rol', active:'Activo' };
   var diff = {};

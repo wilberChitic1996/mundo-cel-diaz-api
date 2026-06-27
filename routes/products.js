@@ -1,16 +1,38 @@
+const logger = require('../utils/logger');
 const express   = require('express');
 const router    = express.Router();
 const auth      = require('../middleware/auth');
 const supabase  = require('../supabase');
 const logAudit  = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
+const cache     = require('../utils/cache');
 
-// GET /api/products
+/**
+ * @openapi
+ * /products:
+ *   get:
+ *     tags: [Products]
+ *     summary: Listar productos activos del tenant
+ *     responses:
+ *       200:
+ *         description: Lista de productos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Product'
+ */
 router.get('/', auth, async (req, res) => {
+  var cacheKey = 'products:' + tid(req);
+  var cached = await cache.get(cacheKey);
+  if (cached) return res.json(cached);
+
   var q = supabase.from('products').select('*').eq('active', true).order('name');
   q = withTenant(q, req);
   var { data, error } = await q;
-  if (error) { console.error('[PRODUCTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[PRODUCTS]'); return res.status(500).json({ error: 'Error interno' }); }
+  await cache.set(cacheKey, data, 120); // 2 minutos
   res.json(data);
 });
 
@@ -21,7 +43,7 @@ router.post('/', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
 
   var { data: codeData, error: codeError } = await supabase.rpc('generate_product_code');
-  if (codeError) { console.error('[PRODUCTS]', codeError.message); return res.status(500).json({ error: 'Error generando código' }); }
+  if (codeError) { logger.error({ err: codeError }, '[PRODUCTS]'); return res.status(500).json({ error: 'Error generando código' }); }
 
   var body = {};
   PRODUCT_FIELDS.forEach(function(f){ if (req.body[f] !== undefined) body[f] = req.body[f]; });
@@ -29,8 +51,9 @@ router.post('/', auth, async (req, res) => {
 
   var { data, error } = await supabase
     .from('products').insert(productData).select().single();
-  if (error) { console.error('[PRODUCTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[PRODUCTS]'); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'producto_creado', 'product', data.id, { name: data.name, code: data.code, price: data.price, stock: data.stock });
+  await cache.del('products:' + tid(req));
   res.status(201).json(data);
 });
 
@@ -48,7 +71,7 @@ router.put('/:id', auth, async (req, res) => {
     req
   );
   var { data, error } = await upd.select().single();
-  if (error) { console.error('[PRODUCTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[PRODUCTS]'); return res.status(500).json({ error: 'Error interno' }); }
 
   var CAMPOS = { name:'Nombre', code:'Código', price:'Precio', cost:'Costo', stock:'Stock', category:'Categoría', shelf:'Ubicación', unit:'Unidad', min_stock:'Stock mínimo' };
   var diff = {};
@@ -62,6 +85,7 @@ router.put('/:id', auth, async (req, res) => {
   diff._producto = before ? before.name : req.params.id;
 
   await logAudit(req.user, 'producto_editado', 'product', req.params.id, diff);
+  await cache.del('products:' + tid(req));
   res.json(data);
 });
 
@@ -82,7 +106,7 @@ router.post('/:id/adjust-stock', auth, async (req, res) => {
   var { data, error } = await withTenant(
     supabase.from('products').update({ stock: qty_after, updated_at: new Date() }).eq('id', req.params.id), req
   ).select().single();
-  if (error) { console.error('[PRODUCTS:adjust]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[PRODUCTS:adjust]'); return res.status(500).json({ error: 'Error interno' }); }
 
   await supabase.from('stock_movements').insert({
     tenant_id: tid(req), product_id: req.params.id,
@@ -102,7 +126,7 @@ router.get('/:id/stock-history', auth, async (req, res) => {
     .order('created_at', { ascending: false }).limit(100);
   q = withTenant(q, req);
   var { data, error } = await q;
-  if (error) { console.error('[PRODUCTS:stock-history]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[PRODUCTS:stock-history]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json(data || []);
 });
 
@@ -118,7 +142,7 @@ router.get('/:id/price-history', auth, async (req, res) => {
     .limit(100);
   q = withTenant(q, req);
   var { data, error } = await q;
-  if (error) { console.error('[PRICE-HISTORY]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[PRICE-HISTORY]'); return res.status(500).json({ error: 'Error interno' }); }
   var history = (data || [])
     .filter(function(r) { return r.details && r.details['Precio']; })
     .map(function(r) {
@@ -135,7 +159,7 @@ router.delete('/:id', auth, async (req, res) => {
     supabase.from('products').update({ active: false, updated_at: new Date() }).eq('id', req.params.id),
     req
   );
-  if (error) { console.error('[PRODUCTS]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[PRODUCTS]'); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'producto_eliminado', 'product', req.params.id, { nombre: before ? before.name : '—', codigo: before ? before.code : '—' });
   res.json({ success: true });
 });

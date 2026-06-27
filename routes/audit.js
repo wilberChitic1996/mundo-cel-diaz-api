@@ -1,9 +1,20 @@
+const logger = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const { withTenant } = require('../utils/tenant');
 
+/**
+ * @openapi
+ * /audit:
+ *   get:
+ *     tags: [Audit]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // GET /api/audit — admin y superadmin
 router.get('/', auth, async (req, res) => {
   if (!['admin','superadmin'].includes(req.user.role)) return res.status(403).json({ error: 'Acceso denegado' });
@@ -27,7 +38,7 @@ router.get('/', auth, async (req, res) => {
   q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
   var { data, error, count } = await q;
-  if (error) { console.error('[AUDIT]', error.message); return res.status(500).json({ error: 'Error interno' }); }
+  if (error) { logger.error({ err: error }, '[AUDIT]'); return res.status(500).json({ error: 'Error interno' }); }
   res.json({ data, total: count, page, limit });
 });
 
