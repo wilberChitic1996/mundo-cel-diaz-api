@@ -96,14 +96,16 @@ app.get('/health', async function(req, res) {
   try {
     var supabase = require('./supabase');
     var TABLES = ['clients', 'products', 'sales', 'sale_items', 'audit_logs', 'repairs', 'warranties', 'accounts'];
-    var counts = await Promise.all(
-      TABLES.map(function(t) {
+    var timeout = new Promise(function(_, reject) { setTimeout(function() { reject(new Error('timeout')); }, 3000); });
+    var counts = await Promise.race([
+      Promise.all(TABLES.map(function(t) {
         return supabase.from(t).select('*', { count: 'exact', head: true }).then(function(r) { return r.count || 0; });
-      })
-    );
+      })),
+      timeout
+    ]);
     total_records = counts.reduce(function(s, c) { return s + c; }, 0);
   } catch (e) {
-    logger.warn({ err: e }, '[HEALTH] No se pudo obtener total_records');
+    // DB no disponible o timeout — health sigue respondiendo ok
   }
   res.json({ status:'ok', version:'2.2.0', system:'PraxisGT API', total_records });
 });
