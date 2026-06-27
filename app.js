@@ -83,6 +83,7 @@ var routes = {
   admin:      require('./routes/admin'),
   reminders:  require('./routes/reminders'),
   push:       require('./routes/push'),
+  backup:     require('./routes/backup'),
 };
 
 Object.keys(routes).forEach(function(name) {
@@ -90,8 +91,21 @@ Object.keys(routes).forEach(function(name) {
   app.use('/api/v1/' + name, routes[name]);  // v1 — nueva convención
 });
 
-app.get('/health', function(req, res) {
-  res.json({ status:'ok', version:'2.2.0', system:'PraxisGT API' });
+app.get('/health', async function(req, res) {
+  var total_records = null;
+  try {
+    var supabase = require('./supabase');
+    var TABLES = ['clients', 'products', 'sales', 'sale_items', 'audit_logs', 'repairs', 'warranties', 'accounts'];
+    var counts = await Promise.all(
+      TABLES.map(function(t) {
+        return supabase.from(t).select('*', { count: 'exact', head: true }).then(function(r) { return r.count || 0; });
+      })
+    );
+    total_records = counts.reduce(function(s, c) { return s + c; }, 0);
+  } catch (e) {
+    logger.warn({ err: e }, '[HEALTH] No se pudo obtener total_records');
+  }
+  res.json({ status:'ok', version:'2.2.0', system:'PraxisGT API', total_records });
 });
 
 setupSwagger(app);
