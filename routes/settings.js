@@ -4,6 +4,7 @@ const router   = express.Router();
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const { withTenant, tid } = require('../utils/tenant');
+const cache    = require('../utils/cache');
 
 /**
  * @openapi
@@ -17,12 +18,17 @@ const { withTenant, tid } = require('../utils/tenant');
  */
 // GET /api/settings
 router.get('/', auth, async (req, res) => {
+  var cacheKey = 'settings:' + tid(req);
+  var cached = await cache.get(cacheKey);
+  if (cached) return res.json(cached);
+
   var q = supabase.from('store_settings').select('key, value').order('key');
   q = withTenant(q, req);
   var { data, error } = await q;
   if (error) return res.status(500).json({ error: 'Error interno' });
   var result = {};
   (data || []).forEach(function(r) { result[r.key] = r.value || ''; });
+  await cache.set(cacheKey, result, 300); // 5 minutos
   res.json(result);
 });
 
@@ -46,6 +52,7 @@ router.put('/', auth, async (req, res) => {
     return res.status(500).json({ error: 'Error interno al guardar configuración' });
   }
 
+  await cache.del('settings:' + tenantId);
   res.json({ ok: true });
 });
 

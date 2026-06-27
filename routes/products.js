@@ -5,6 +5,7 @@ const auth      = require('../middleware/auth');
 const supabase  = require('../supabase');
 const logAudit  = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
+const cache     = require('../utils/cache');
 
 /**
  * @openapi
@@ -23,10 +24,15 @@ const { withTenant, tid } = require('../utils/tenant');
  *                 $ref: '#/components/schemas/Product'
  */
 router.get('/', auth, async (req, res) => {
+  var cacheKey = 'products:' + tid(req);
+  var cached = await cache.get(cacheKey);
+  if (cached) return res.json(cached);
+
   var q = supabase.from('products').select('*').eq('active', true).order('name');
   q = withTenant(q, req);
   var { data, error } = await q;
   if (error) { logger.error({ err: error }, '[PRODUCTS]'); return res.status(500).json({ error: 'Error interno' }); }
+  await cache.set(cacheKey, data, 120); // 2 minutos
   res.json(data);
 });
 
@@ -47,6 +53,7 @@ router.post('/', auth, async (req, res) => {
     .from('products').insert(productData).select().single();
   if (error) { logger.error({ err: error }, '[PRODUCTS]'); return res.status(500).json({ error: 'Error interno' }); }
   await logAudit(req.user, 'producto_creado', 'product', data.id, { name: data.name, code: data.code, price: data.price, stock: data.stock });
+  await cache.del('products:' + tid(req));
   res.status(201).json(data);
 });
 
@@ -78,6 +85,7 @@ router.put('/:id', auth, async (req, res) => {
   diff._producto = before ? before.name : req.params.id;
 
   await logAudit(req.user, 'producto_editado', 'product', req.params.id, diff);
+  await cache.del('products:' + tid(req));
   res.json(data);
 });
 
