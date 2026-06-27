@@ -4,6 +4,16 @@ const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const { withTenant, tid } = require('../utils/tenant');
 
+/**
+ * @openapi
+ * /caja:
+ *   get:
+ *     tags: [Caja]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // GET /api/caja/sesiones
 router.get('/sesiones', auth, async (req, res) => {
   var q = supabase.from('caja_sesiones').select('*').order('created_at', { ascending: false }).limit(30);

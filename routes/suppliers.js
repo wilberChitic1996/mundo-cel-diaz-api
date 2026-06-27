@@ -7,6 +7,16 @@ const { withTenant, tid } = require('../utils/tenant');
 
 // ── PROVEEDORES ───────────────────────────────────────
 
+/**
+ * @openapi
+ * /suppliers:
+ *   get:
+ *     tags: [Suppliers]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // GET /api/suppliers
 router.get('/', auth, async (req, res) => {
   var q = supabase.from('suppliers').select('*').eq('active', true).order('name');

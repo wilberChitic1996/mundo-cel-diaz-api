@@ -1,0 +1,28 @@
+name: Uptime Check
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # cada 15 minutos
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Health check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping producción
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://mundo-cel-diaz-api-production.up.railway.app/health)
+          echo "Producción HTTP $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::API producción devolvió $STATUS"
+            exit 1
+          fi
+
+      - name: Ping staging
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://mundo-cel-diaz-api-production-e546.up.railway.app/health)
+          echo "Staging HTTP $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::API staging devolvió $STATUS"
+          fi

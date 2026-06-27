@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging, 'claude/**']
+  pull_request:
+    branches: [main, staging]
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL_STAGING }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY_STAGING }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET_TEST || 'test-secret-do-not-use-in-production' }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || 'test' }}
