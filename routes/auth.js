@@ -224,7 +224,7 @@ router.get('/me', require('../middleware/auth'), (req, res) => {
  *         description: Token inválido o expirado
  */
 router.post('/refresh', async (req, res) => {
-  const { refreshToken } = req.body;
+  const { refreshToken } = req.body || {};
   if (!refreshToken) return res.status(400).json({ error: 'Refresh token requerido' });
 
   var hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
@@ -256,7 +256,7 @@ router.post('/refresh', async (req, res) => {
 
 // POST /api/auth/logout
 router.post('/logout', async (req, res) => {
-  const { refreshToken } = req.body;
+  const { refreshToken } = req.body || {};
   if (refreshToken) {
     var hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     await supabase.from('refresh_tokens').update({ revoked_at: new Date().toISOString() }).eq('token_hash', hash);
