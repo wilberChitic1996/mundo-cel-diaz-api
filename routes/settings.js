@@ -5,6 +5,16 @@ const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const { withTenant, tid } = require('../utils/tenant');
 
+/**
+ * @openapi
+ * /settings:
+ *   get:
+ *     tags: [Settings]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // GET /api/settings
 router.get('/', auth, async (req, res) => {
   var q = supabase.from('store_settings').select('key, value').order('key');

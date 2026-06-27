@@ -10,6 +10,16 @@ const { withTenant, tid } = require('../utils/tenant');
 // Catálogo cerrado por negocio (tenant). El admin las crea/edita; el
 // formulario de producto las elige de esta lista (no texto libre).
 
+/**
+ * @openapi
+ * /categories:
+ *   get:
+ *     tags: [Categories]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // GET /api/categories
 router.get('/', auth, async (req, res) => {
   var q = supabase.from('categories').select('*').eq('active', true)

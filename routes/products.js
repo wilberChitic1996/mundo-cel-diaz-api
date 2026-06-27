@@ -6,7 +6,22 @@ const supabase  = require('../supabase');
 const logAudit  = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
 
-// GET /api/products
+/**
+ * @openapi
+ * /products:
+ *   get:
+ *     tags: [Products]
+ *     summary: Listar productos activos del tenant
+ *     responses:
+ *       200:
+ *         description: Lista de productos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Product'
+ */
 router.get('/', auth, async (req, res) => {
   var q = supabase.from('products').select('*').eq('active', true).order('name');
   q = withTenant(q, req);

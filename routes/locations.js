@@ -10,6 +10,16 @@ const { withTenant, tid } = require('../utils/tenant');
 // El "mueble/estante" (vitrina, rack, bodega) es la unidad administrable.
 // La posición exacta dentro del mueble se guarda por producto (position).
 
+/**
+ * @openapi
+ * /locations:
+ *   get:
+ *     tags: [Locations]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // GET /api/locations
 router.get('/', auth, async (req, res) => {
   var q = supabase.from('locations').select('*').eq('active', true)

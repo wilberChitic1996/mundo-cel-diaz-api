@@ -6,6 +6,16 @@ const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
 
+/**
+ * @openapi
+ * /repairs:
+ *   get:
+ *     tags: [Repairs]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // GET /api/repairs
 router.get('/', auth, async (req, res) => {
   var q = supabase.from('repairs').select('*').order('created_at', { ascending: false });

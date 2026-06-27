@@ -5,6 +5,16 @@ const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const { withTenant } = require('../utils/tenant');
 
+/**
+ * @openapi
+ * /audit:
+ *   get:
+ *     tags: [Audit]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // GET /api/audit — admin y superadmin
 router.get('/', auth, async (req, res) => {
   if (!['admin','superadmin'].includes(req.user.role)) return res.status(403).json({ error: 'Acceso denegado' });

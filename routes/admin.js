@@ -10,6 +10,16 @@ function superadminOnly(req, res, next) {
   next();
 }
 
+/**
+ * @openapi
+ * /admin:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Ver documentación completa en /api-docs
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 // POST /api/admin/init — crea el superadmin (una sola vez, protegido por INIT_SECRET)
 router.post('/init', async (req, res) => {
   var { secret, name, email, password } = req.body;

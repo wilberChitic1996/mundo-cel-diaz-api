@@ -4,6 +4,7 @@ const cors    = require('cors');
 const helmet  = require('helmet');
 const { generalLimiter } = require('./middleware/rateLimit');
 const logger = require('./utils/logger');
+const { setupSwagger } = require('./swagger');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -77,6 +78,8 @@ app.use('/api/admin',     require('./routes/admin'));
 app.get('/health', function(req, res) {
   res.json({ status:'ok', version:'2.2.0', system:'PraxisGT API' });
 });
+
+setupSwagger(app);
 
 app.use(function(req, res) { res.status(404).json({ error:'Ruta no encontrada' }); });
 
