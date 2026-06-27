@@ -28,6 +28,7 @@ app.use(generalLimiter);
 app.use('/api/settings', express.json({ limit: '600kb' }));
 app.use(express.json({ limit: '10kb' }));
 
+app.use('/api/public',    require('./routes/public'));
 app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/products',  require('./routes/products'));
 app.use('/api/sales',     require('./routes/sales'));
