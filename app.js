@@ -8,7 +8,33 @@ const logger = require('./utils/logger');
 const app = express();
 app.set('trust proxy', 1);
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      scriptSrc: ["'none'"],
+      styleSrc: ["'none'"],
+      imgSrc: ["'none'"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'none'"],
+      frameSrc: ["'none'"],
+      formAction: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: true,
+  crossOriginOpenerPolicy: { policy: 'same-origin' },
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  strictTransportSecurity: { maxAge: 63072000, includeSubDomains: true, preload: true },
+  xContentTypeOptions: true,
+  xDnsPrefetchControl: { allow: false },
+  xFrameOptions: { action: 'deny' },
+  xPermittedCrossDomainPolicies: { permittedPolicies: 'none' },
+}));
 
 var allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(function(u) { return u.trim(); })
