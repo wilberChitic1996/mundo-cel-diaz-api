@@ -5,9 +5,13 @@ const helmet  = require('helmet');
 const { generalLimiter } = require('./middleware/rateLimit');
 const logger = require('./utils/logger');
 const { setupSwagger } = require('./swagger');
+const { initSentry, sentryRequestHandler, sentryErrorHandler } = require('./utils/sentry');
+
+initSentry();
 
 const app = express();
 app.set('trust proxy', 1);
+app.use(sentryRequestHandler());
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -82,6 +86,8 @@ app.get('/health', function(req, res) {
 setupSwagger(app);
 
 app.use(function(req, res) { res.status(404).json({ error:'Ruta no encontrada' }); });
+
+app.use(sentryErrorHandler());
 
 app.use(function(err, req, res, _next) {
   logger.error({ err, method: req.method, url: req.url }, 'Error interno del servidor');
