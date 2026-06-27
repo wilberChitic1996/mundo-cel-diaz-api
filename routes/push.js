@@ -6,11 +6,19 @@ const supabase  = require('../supabase');
 const logger    = require('../utils/logger');
 const { withTenant, tid } = require('../utils/tenant');
 
-webpush.setVapidDetails(
-  'mailto:' + (process.env.VAPID_EMAIL || 'admin@mundoceldiaz.com'),
-  process.env.VAPID_PUBLIC_KEY  || '',
-  process.env.VAPID_PRIVATE_KEY || ''
-);
+// Inicialización lazy — solo si las claves están configuradas (no disponibles en CI)
+var vapidReady = false;
+function ensureVapid() {
+  if (vapidReady) return true;
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return false;
+  webpush.setVapidDetails(
+    'mailto:' + (process.env.VAPID_EMAIL || 'admin@mundoceldiaz.com'),
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+  vapidReady = true;
+  return true;
+}
 
 // GET /api/push/vapid-public-key — clave pública para el service worker
 router.get('/vapid-public-key', function(req, res) {
@@ -49,7 +57,7 @@ router.delete('/subscribe', auth, async function(req, res) {
 
 // Función interna: enviar notificación push a todos los usuarios de un tenant
 async function sendPushToTenant(tenantId, payload) {
-  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
+  if (!ensureVapid()) return;
 
   var { data: subs } = await supabase
     .from('push_subscriptions')
