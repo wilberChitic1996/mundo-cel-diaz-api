@@ -94,14 +94,15 @@ router.put('/:id', auth, async (req, res) => {
       status: b.status, parts: b.parts||[],
       reception_checklist: b.receptionChecklist !== undefined ? b.receptionChecklist : undefined,
       delivery_photos: b.deliveryPhotos !== undefined ? b.deliveryPhotos : undefined,
+      final_cost: b.finalCost !== undefined ? (parseFloat(b.finalCost)||0) : undefined,
       updated_at: new Date()
     }).eq('id', req.params.id),
     req
   ).select().single();
   if (error) { logger.error({ err: error }, '[REPAIRS]'); return res.status(500).json({ error: 'Error interno' }); }
 
-  var CAMPOS = { clientName:'Cliente', brand:'Marca', model:'Modelo', imei:'IMEI', problemDesc:'Problema', diagnosis:'Diagnóstico', techName:'Técnico', estimatedCost:'Costo estimado', promisedDate:'Fecha prometida', internalNote:'Nota interna', status:'Estado' };
-  var DB_CAMPOS = { clientName:'client_name', brand:'brand', model:'model', imei:'imei', problemDesc:'problem_desc', diagnosis:'diagnosis', techName:'tech_name', estimatedCost:'estimated_cost', promisedDate:'promised_date', internalNote:'internal_note', status:'status' };
+  var CAMPOS = { clientName:'Cliente', brand:'Marca', model:'Modelo', imei:'IMEI', problemDesc:'Problema', diagnosis:'Diagnóstico', techName:'Técnico', estimatedCost:'Costo estimado', finalCost:'Costo final', promisedDate:'Fecha prometida', internalNote:'Nota interna', status:'Estado' };
+  var DB_CAMPOS = { clientName:'client_name', brand:'brand', model:'model', imei:'imei', problemDesc:'problem_desc', diagnosis:'diagnosis', techName:'tech_name', estimatedCost:'estimated_cost', finalCost:'final_cost', promisedDate:'promised_date', internalNote:'internal_note', status:'status' };
   var diff = {};
   if (before) {
     Object.keys(CAMPOS).forEach(function(k){
