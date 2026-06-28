@@ -84,6 +84,7 @@ var routes = {
   reminders:  require('./routes/reminders'),
   push:       require('./routes/push'),
   backup:     require('./routes/backup'),
+  serials:    require('./routes/serials'),
 };
 
 Object.keys(routes).forEach(function(name) {

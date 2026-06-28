@@ -47,7 +47,7 @@ router.post('/', auth, async (req, res) => {
     if (existingAcc) return res.status(200).json(Object.assign({ type: 'account' }, existingAcc));
   }
 
-  // Validar stock y descuento
+  // Validar stock, descuento y seriales
   var DISCOUNT_LIMIT = { cajero: 0.20 };
   var userRole = req.user.role;
   for (var check of items) {
@@ -63,6 +63,31 @@ router.post('/', auth, async (req, res) => {
             return res.status(403).json({ error: 'Descuento no autorizado: el rol "' + userRole + '" tiene un límite de ' + (DISCOUNT_LIMIT[userRole] * 100) + '% en "' + dbProd.name + '"' });
           }
         }
+      }
+      // Validar serial si el ítem trae serial_id
+      if (check.serial_id) {
+        var { data: dbSerial } = await supabase.from('product_serials')
+          .select('id, status, imei')
+          .eq('id', check.serial_id)
+          .eq('tenant_id', tenantId)
+          .single();
+        if (!dbSerial) return res.status(400).json({ error: 'Serial no encontrado: ' + check.imei });
+        if (dbSerial.status !== 'disponible') {
+          return res.status(409).json({ error: 'El serial ' + dbSerial.imei + ' ya fue vendido o no está disponible' });
+        }
+      }
+    }
+  }
+
+  // Función interna para vincular seriales después de crear la venta
+  async function linkSerials(saleId, itemsList) {
+    for (var it of itemsList) {
+      if (it.serial_id) {
+        await supabase.from('product_serials').update({
+          status: 'vendido',
+          sale_id: saleId,
+          updated_at: new Date().toISOString(),
+        }).eq('id', it.serial_id).eq('tenant_id', tenantId);
       }
     }
   }
@@ -94,6 +119,8 @@ router.post('/', auth, async (req, res) => {
         if (rpcErr) logger.error({ err: rpcErr }, '[SALES] decrement_stock RPC error para producto ' + item.id);
       }
     }
+
+    await linkSerials(sale.id, items);
 
     await logAudit(req.user, 'venta_completada', 'sale', sale.id, {
       cliente: client, total, metodo: method||'Efectivo',
@@ -151,6 +178,8 @@ router.post('/', auth, async (req, res) => {
         if (rpcErr2) logger.error({ err: rpcErr2 }, '[SALES] decrement_stock RPC error para producto ' + item2.id);
       }
     }
+
+    await linkSerials(creditSale.id, items);
 
     await logAudit(req.user, 'cuenta_creada', 'account', acc.id, {
       cliente: client, total, abono_inicial: paid, tipo: payType,
