@@ -25,9 +25,9 @@ router.get('/summary', auth, async (req, res) => {
     var cutoff30 = new Date(today.getTime() - 30 * 86400000).toISOString();
 
     var [acctRes, warrRes, repairRes] = await Promise.all([
-      // Cuentas vencidas
+      // Cuentas con saldo pendiente (aging por antigüedad desde created_at)
       withTenant(
-        supabase.from('accounts').select('id, client, balance, due_date').eq('status', 'pendiente').lte('due_date', todayStr).not('due_date', 'is', null),
+        supabase.from('accounts').select('id, client, balance, created_at').gt('balance', 0),
         req
       ),
       // Garantías por vencer en 7 días
@@ -37,7 +37,7 @@ router.get('/summary', auth, async (req, res) => {
       ),
       // Reparaciones sin movimiento >30 días
       withTenant(
-        supabase.from('repairs').select('id, client, device, status, updated_at').in('status', ['recibido', 'en_proceso']).lt('updated_at', cutoff30),
+        supabase.from('repairs').select('id, client_name, brand, model, status, updated_at').in('status', ['recibido', 'en_revision']).lt('updated_at', cutoff30),
         req
       ),
     ]);
@@ -49,7 +49,7 @@ router.get('/summary', auth, async (req, res) => {
     var accounts = (acctRes.data || []).map(function(a) {
       return {
         ...a,
-        days_overdue: Math.floor((today.getTime() - new Date(a.due_date).getTime()) / 86400000)
+        days_overdue: Math.floor((today.getTime() - new Date(a.created_at).getTime()) / 86400000)
       };
     });
 
@@ -88,22 +88,19 @@ router.get('/summary', auth, async (req, res) => {
 router.get('/accounts', auth, async (req, res) => {
   try {
     var today = new Date();
-    var todayStr = today.toISOString().split('T')[0];
 
     var q = supabase
       .from('accounts')
-      .select('id, client, balance, due_date, created_at')
-      .eq('status', 'pendiente')
-      .lte('due_date', todayStr)
-      .not('due_date', 'is', null)
-      .order('due_date', { ascending: true });
+      .select('id, client, balance, created_at')
+      .gt('balance', 0)
+      .order('created_at', { ascending: true });
     q = withTenant(q, req);
     var { data, error } = await q;
     if (error) { logger.error({ err: error }, '[REMINDERS] accounts'); return res.status(500).json({ error: 'Error interno' }); }
 
     var buckets = { current: [], days30: [], days60: [], days90plus: [] };
     for (var row of (data || [])) {
-      var days = Math.floor((today.getTime() - new Date(row.due_date).getTime()) / 86400000);
+      var days = Math.floor((today.getTime() - new Date(row.created_at).getTime()) / 86400000);
       var item = { ...row, days_overdue: days };
       if (days <= 30) buckets.days30.push(item);
       else if (days <= 60) buckets.days60.push(item);
