@@ -10,19 +10,18 @@ function getPush() {
 // Cuentas por cobrar: vencimiento en días 0, 30, 60, 90
 async function checkOverdueAccounts() {
   try {
-    var now = new Date().toISOString().split('T')[0];
+    var cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
     var { data, error } = await supabase
       .from('accounts')
-      .select('id, client, balance, due_date, tenant_id')
-      .eq('status', 'pendiente')
-      .lte('due_date', now)
-      .not('due_date', 'is', null);
+      .select('id, client, balance, created_at, tenant_id')
+      .gt('balance', 0)
+      .lt('created_at', cutoff);
     if (error) { logger.error({ err: error }, '[CRON] checkOverdueAccounts error'); return; }
     if (!data || data.length === 0) return;
 
     var grouped = {};
     for (var row of data) {
-      var days = Math.floor((Date.now() - new Date(row.due_date).getTime()) / 86400000);
+      var days = Math.floor((Date.now() - new Date(row.created_at).getTime()) / 86400000);
       grouped[row.tenant_id] = grouped[row.tenant_id] || [];
       grouped[row.tenant_id].push({ ...row, days_overdue: days });
     }
@@ -74,8 +73,8 @@ async function checkStalledRepairs() {
     var cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
     var { data, error } = await supabase
       .from('repairs')
-      .select('id, client, device, status, updated_at, tenant_id')
-      .in('status', ['recibido', 'en_proceso'])
+      .select('id, client_name, brand, model, status, updated_at, tenant_id')
+      .in('status', ['recibido', 'en_revision'])
       .lt('updated_at', cutoff);
     if (error) { logger.error({ err: error }, '[CRON] checkStalledRepairs error'); return; }
     if (!data || data.length === 0) return;

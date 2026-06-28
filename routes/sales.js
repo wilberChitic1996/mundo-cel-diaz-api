@@ -27,9 +27,24 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/sales
 router.post('/', auth, async (req, res) => {
-  var { client, total, method, items, payType, initialPay, idempotencyKey, nota } = req.body;
+  var { client, total, method, items, payType, initialPay, idempotencyKey, nota, ivaPct, secondMethod, secondAmount, repairId } = req.body;
+
+  // Marca una reparación como entregada (cobrada) — evita cobros duplicados
+  async function marcarReparacionEntregada() {
+    if (!repairId) return;
+    var { error: repErr } = await withTenant(
+      supabase.from('repairs').update({ status: 'entregado', updated_at: new Date() }).eq('id', repairId),
+      req
+    );
+    if (repErr) logger.error({ err: repErr }, '[SALES] marcar reparación entregada');
+  }
   if (!client || !items || !items.length)
     return res.status(400).json({ error: 'Datos incompletos' });
+
+  // Brecha #4: calcular IVA incluido (precios ya incluyen IVA)
+  var ivaPercent = parseFloat(ivaPct) || 0;
+  var ivaAmount  = ivaPercent > 0 ? total - total / (1 + ivaPercent / 100) : 0;
+  var subtotalNeto = total - ivaAmount;
 
   var registradoPor = { name: req.user.name, role: req.user.role };
   var tenantId = tid(req);
@@ -47,7 +62,7 @@ router.post('/', auth, async (req, res) => {
     if (existingAcc) return res.status(200).json(Object.assign({ type: 'account' }, existingAcc));
   }
 
-  // Validar stock y descuento
+  // Validar stock, descuento y seriales
   var DISCOUNT_LIMIT = { cajero: 0.20 };
   var userRole = req.user.role;
   for (var check of items) {
@@ -64,11 +79,36 @@ router.post('/', auth, async (req, res) => {
           }
         }
       }
+      // Validar serial si el ítem trae serial_id
+      if (check.serial_id) {
+        var { data: dbSerial } = await supabase.from('product_serials')
+          .select('id, status, imei')
+          .eq('id', check.serial_id)
+          .eq('tenant_id', tenantId)
+          .single();
+        if (!dbSerial) return res.status(400).json({ error: 'Serial no encontrado: ' + check.imei });
+        if (dbSerial.status !== 'disponible') {
+          return res.status(409).json({ error: 'El serial ' + dbSerial.imei + ' ya fue vendido o no está disponible' });
+        }
+      }
+    }
+  }
+
+  // Función interna para vincular seriales después de crear la venta
+  async function linkSerials(saleId, itemsList) {
+    for (var it of itemsList) {
+      if (it.serial_id) {
+        await supabase.from('product_serials').update({
+          status: 'vendido',
+          sale_id: saleId,
+          updated_at: new Date().toISOString(),
+        }).eq('id', it.serial_id).eq('tenant_id', tenantId);
+      }
     }
   }
 
   if (payType === 'completo') {
-    var insertData = { client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId };
+    var insertData = { client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId, iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto, second_method: secondMethod||null, second_amount: secondAmount ? parseFloat(secondAmount) : null };
     if (idempotencyKey) insertData.idempotency_key = idempotencyKey;
     if (nota) insertData.nota = nota;
 
@@ -76,7 +116,7 @@ router.post('/', auth, async (req, res) => {
     if (sErr) { logger.error({ err: sErr }, '[SALES]'); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: siErr } = await supabase.from('sale_items').insert(
-      items.map(function(i){ return { sale_id:sale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
+      items.map(function(i){ return { sale_id:sale.id, product_id:(i.unit==='serv'?null:(i.id||null)), code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (siErr) {
       logger.error('[SALES] sale_items insert failed for sale');
@@ -95,6 +135,10 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
+    await linkSerials(sale.id, items);
+
+    await marcarReparacionEntregada();
+
     await logAudit(req.user, 'venta_completada', 'sale', sale.id, {
       cliente: client, total, metodo: method||'Efectivo',
       articulos: items.map(function(i){ return i.name+' x'+i.qty; }).join(', ')
@@ -110,14 +154,16 @@ router.post('/', auth, async (req, res) => {
     var saleInsert2 = {
       client, total, method: method||'Efectivo', status: 'cuenta',
       pay_type: payType === 'parcial' ? 'parcial' : 'credito',
-      user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId
+      user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId,
+      iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto,
+      second_method: secondMethod||null, second_amount: secondAmount ? parseFloat(secondAmount) : null
     };
     if (nota) saleInsert2.nota = nota;
     var { data: creditSale, error: csErr } = await supabase.from('sales').insert(saleInsert2).select().single();
     if (csErr) { logger.error({ err: csErr }, '[SALES credit]'); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: csiErr } = await supabase.from('sale_items').insert(
-      items.map(function(i){ return { sale_id:creditSale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
+      items.map(function(i){ return { sale_id:creditSale.id, product_id:(i.unit==='serv'?null:(i.id||null)), code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (csiErr) {
       logger.error('[SALES] sale_items (credit) insert failed for sale');
@@ -151,6 +197,10 @@ router.post('/', auth, async (req, res) => {
         if (rpcErr2) logger.error({ err: rpcErr2 }, '[SALES] decrement_stock RPC error para producto ' + item2.id);
       }
     }
+
+    await linkSerials(creditSale.id, items);
+
+    await marcarReparacionEntregada();
 
     await logAudit(req.user, 'cuenta_creada', 'account', acc.id, {
       cliente: client, total, abono_inicial: paid, tipo: payType,
