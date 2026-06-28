@@ -59,6 +59,9 @@ app.use(cors({
 app.use(generalLimiter);
 app.use('/api/settings',    express.json({ limit: '600kb' }));
 app.use('/api/v1/settings', express.json({ limit: '600kb' }));
+// Fotos de reparaciones en base64 pueden pesar hasta ~4MB
+app.use('/api/repairs',     express.json({ limit: '4mb' }));
+app.use('/api/v1/repairs',  express.json({ limit: '4mb' }));
 app.use(express.json({ limit: '10kb' }));
 
 // v1 routes (nueva convención — mismos handlers, prefijo /api/v1/)
