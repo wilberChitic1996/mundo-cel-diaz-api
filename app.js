@@ -95,6 +95,11 @@ Object.keys(routes).forEach(function(name) {
   app.use('/api/v1/' + name, routes[name]);  // v1 — nueva convención
 });
 
+// Variantes de producto — montadas bajo /api/products/:id/variants
+var variantsRouter = require('./routes/variants');
+app.use('/api/products',    variantsRouter);
+app.use('/api/v1/products', variantsRouter);
+
 app.get('/health', async function(req, res) {
   var total_records = null;
   try {
