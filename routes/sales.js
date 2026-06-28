@@ -27,7 +27,17 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/sales
 router.post('/', auth, async (req, res) => {
-  var { client, total, method, items, payType, initialPay, idempotencyKey, nota, ivaPct, secondMethod, secondAmount } = req.body;
+  var { client, total, method, items, payType, initialPay, idempotencyKey, nota, ivaPct, secondMethod, secondAmount, repairId } = req.body;
+
+  // Marca una reparación como entregada (cobrada) — evita cobros duplicados
+  async function marcarReparacionEntregada() {
+    if (!repairId) return;
+    var { error: repErr } = await withTenant(
+      supabase.from('repairs').update({ status: 'entregado', updated_at: new Date() }).eq('id', repairId),
+      req
+    );
+    if (repErr) logger.error({ err: repErr }, '[SALES] marcar reparación entregada');
+  }
   if (!client || !items || !items.length)
     return res.status(400).json({ error: 'Datos incompletos' });
 
@@ -127,6 +137,8 @@ router.post('/', auth, async (req, res) => {
 
     await linkSerials(sale.id, items);
 
+    await marcarReparacionEntregada();
+
     await logAudit(req.user, 'venta_completada', 'sale', sale.id, {
       cliente: client, total, metodo: method||'Efectivo',
       articulos: items.map(function(i){ return i.name+' x'+i.qty; }).join(', ')
@@ -187,6 +199,8 @@ router.post('/', auth, async (req, res) => {
     }
 
     await linkSerials(creditSale.id, items);
+
+    await marcarReparacionEntregada();
 
     await logAudit(req.user, 'cuenta_creada', 'account', acc.id, {
       cliente: client, total, abono_inicial: paid, tipo: payType,
