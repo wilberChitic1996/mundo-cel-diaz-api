@@ -59,6 +59,9 @@ app.use(cors({
 app.use(generalLimiter);
 app.use('/api/settings',    express.json({ limit: '600kb' }));
 app.use('/api/v1/settings', express.json({ limit: '600kb' }));
+// Fotos de reparaciones en base64 pueden pesar hasta ~4MB
+app.use('/api/repairs',     express.json({ limit: '4mb' }));
+app.use('/api/v1/repairs',  express.json({ limit: '4mb' }));
 app.use(express.json({ limit: '10kb' }));
 
 // v1 routes (nueva convención — mismos handlers, prefijo /api/v1/)
@@ -84,12 +87,18 @@ var routes = {
   reminders:  require('./routes/reminders'),
   push:       require('./routes/push'),
   backup:     require('./routes/backup'),
+  serials:    require('./routes/serials'),
 };
 
 Object.keys(routes).forEach(function(name) {
   app.use('/api/'    + name, routes[name]);  // Legacy — mantiene compatibilidad
   app.use('/api/v1/' + name, routes[name]);  // v1 — nueva convención
 });
+
+// Variantes de producto — montadas bajo /api/products/:id/variants
+var variantsRouter = require('./routes/variants');
+app.use('/api/products',    variantsRouter);
+app.use('/api/v1/products', variantsRouter);
 
 app.get('/health', async function(req, res) {
   var total_records = null;
