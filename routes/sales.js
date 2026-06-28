@@ -106,7 +106,7 @@ router.post('/', auth, async (req, res) => {
     if (sErr) { logger.error({ err: sErr }, '[SALES]'); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: siErr } = await supabase.from('sale_items').insert(
-      items.map(function(i){ return { sale_id:sale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
+      items.map(function(i){ return { sale_id:sale.id, product_id:(i.unit==='serv'?null:(i.id||null)), code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (siErr) {
       logger.error('[SALES] sale_items insert failed for sale');
@@ -151,7 +151,7 @@ router.post('/', auth, async (req, res) => {
     if (csErr) { logger.error({ err: csErr }, '[SALES credit]'); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: csiErr } = await supabase.from('sale_items').insert(
-      items.map(function(i){ return { sale_id:creditSale.id, product_id:i.id||null, code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
+      items.map(function(i){ return { sale_id:creditSale.id, product_id:(i.unit==='serv'?null:(i.id||null)), code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
     );
     if (csiErr) {
       logger.error('[SALES] sale_items (credit) insert failed for sale');
