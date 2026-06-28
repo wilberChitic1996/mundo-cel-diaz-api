@@ -27,7 +27,7 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/sales
 router.post('/', auth, async (req, res) => {
-  var { client, total, method, items, payType, initialPay, idempotencyKey, nota, ivaPct } = req.body;
+  var { client, total, method, items, payType, initialPay, idempotencyKey, nota, ivaPct, secondMethod, secondAmount } = req.body;
   if (!client || !items || !items.length)
     return res.status(400).json({ error: 'Datos incompletos' });
 
@@ -98,7 +98,7 @@ router.post('/', auth, async (req, res) => {
   }
 
   if (payType === 'completo') {
-    var insertData = { client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId, iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto };
+    var insertData = { client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId, iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto, second_method: secondMethod||null, second_amount: secondAmount ? parseFloat(secondAmount) : null };
     if (idempotencyKey) insertData.idempotency_key = idempotencyKey;
     if (nota) insertData.nota = nota;
 
@@ -143,7 +143,8 @@ router.post('/', auth, async (req, res) => {
       client, total, method: method||'Efectivo', status: 'cuenta',
       pay_type: payType === 'parcial' ? 'parcial' : 'credito',
       user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId,
-      iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto
+      iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto,
+      second_method: secondMethod||null, second_amount: secondAmount ? parseFloat(secondAmount) : null
     };
     if (nota) saleInsert2.nota = nota;
     var { data: creditSale, error: csErr } = await supabase.from('sales').insert(saleInsert2).select().single();
