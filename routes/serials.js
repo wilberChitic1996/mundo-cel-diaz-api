@@ -52,7 +52,7 @@ router.get('/products/:productId/serials', authMiddleware, async function(req, r
 
     let query = supabase
       .from('product_serials')
-      .select('id, imei, status, notes, sale_id, created_at, updated_at, sales(id, date, client)')
+      .select('id, imei, status, notes, sale_id, created_at, updated_at, sales(id, date:created_at, client)')
       .eq('tenant_id', tenantId)
       .eq('product_id', productId)
       .order('created_at', { ascending: false });
@@ -224,7 +224,7 @@ router.get('/serials/search', authMiddleware, async function(req, res) {
 
     const { data, error } = await supabase
       .from('product_serials')
-      .select('id, imei, status, notes, sale_id, created_at, products(id, name, code), sales(id, date, client)')
+      .select('id, imei, status, notes, sale_id, created_at, products(id, name, code), sales(id, date:created_at, client)')
       .eq('tenant_id', tenantId)
       .ilike('imei', '%' + q + '%')
       .limit(20);
