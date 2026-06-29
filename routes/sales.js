@@ -215,9 +215,18 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     var { data: acc, error: aErr } = await supabase.from('accounts').insert(accInsert).select().single();
     if (aErr) { logger.error({ err: aErr }, '[SALES]'); return res.status(500).json({ error: 'Error interno' }); }
 
-    await supabase.from('account_items').insert(
+    var { error: aiErr } = await supabase.from('account_items').insert(
       items.map(function(i){ return { account_id:acc.id, code:i.code, name:i.name, price:i.price, qty:i.qty, tenant_id:tenantId }; })
     );
+    if (aiErr) {
+      // Si fallan los ítems de la cuenta, revertir FK-safe (cuenta → ítems de venta → venta)
+      // para no dejar una cuenta por cobrar sin su detalle (causa raíz del bug legacy).
+      logger.error({ err: aiErr }, '[SALES credit] account_items insert failed');
+      await supabase.from('accounts').delete().eq('id', acc.id).eq('tenant_id', tenantId);
+      await supabase.from('sale_items').delete().eq('sale_id', creditSale.id).eq('tenant_id', tenantId);
+      await supabase.from('sales').delete().eq('id', creditSale.id).eq('tenant_id', tenantId);
+      return res.status(500).json({ error: 'Error al guardar ítems de la cuenta' });
+    }
 
     if (paid > 0) {
       await supabase.from('account_payments').insert({
