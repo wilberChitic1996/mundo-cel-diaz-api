@@ -4,6 +4,7 @@ const router   = express.Router();
 const bcrypt   = require('bcryptjs');
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
+const cache    = require('../utils/cache');
 
 function superadminOnly(req, res, next) {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Acceso denegado' });
@@ -126,6 +127,7 @@ router.put('/tenants/:id', auth, superadminOnly, async (req, res) => {
   var { data, error } = await supabase
     .from('tenants').update(updates).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: 'Error interno' });
+  await cache.del('sub:' + req.params.id); // invalidar caché de suscripción tras cambiar active/expires_at
   res.json(data);
 });
 

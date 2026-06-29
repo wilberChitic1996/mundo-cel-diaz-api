@@ -5,6 +5,9 @@ const auth      = require('../middleware/auth');
 const supabase  = require('../supabase');
 const logAudit  = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
+const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
+const { parsePaging } = require('../utils/paging');
 
 /**
  * @openapi
@@ -16,22 +19,39 @@ const { withTenant, tid } = require('../utils/tenant');
  *       200:
  *         description: OK
  */
-// GET /api/accounts
+// GET /api/accounts — paginación opcional (?page&limit); sin params devuelve todo (compat).
 router.get('/', auth, async (req, res) => {
-  var q = supabase.from('accounts').select('*, account_items(*), account_payments(*)').order('created_at', { ascending: false });
+  var pg = parsePaging(req.query);
+  var q = supabase.from('accounts').select('*, account_items(*), account_payments(*)', pg.hasPaging ? { count: 'exact' } : undefined)
+    .order('created_at', { ascending: false });
   q = withTenant(q, req);
-  var { data, error } = await q;
+  if (pg.hasPaging) q = q.range(pg.from, pg.to);
+  var { data, error, count } = await q;
   if (error) { logger.error({ err: error }, '[ACCOUNTS]'); return res.status(500).json({ error: 'Error interno' }); }
+  if (pg.hasPaging) return res.json({ data: data || [], total: count || 0, page: pg.page, limit: pg.limit });
   res.json(data);
 });
 
 // POST /api/accounts
-router.post('/', auth, async (req, res) => {
-  var { client, total, paid, balance, status, method, items } = req.body;
+router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
+  var { client, total, paid, balance, status, method, items, idempotencyKey } = req.body;
   var registradoPor = { name: req.user.name, role: req.user.role };
+
+  // Idempotencia (B5): evita duplicar una deuda por doble-click o reintento de red.
+  // El cliente envía una clave estable por intento de creación; si ya existe, se devuelve la cuenta previa.
+  if (idempotencyKey) {
+    var { data: existingAcc } = await withTenant(
+      supabase.from('accounts').select('*').eq('idempotency_key', idempotencyKey), req
+    ).maybeSingle();
+    if (existingAcc) return res.status(200).json(existingAcc);
+  }
+
+  var accInsert = { client, total, paid:paid||0, balance:balance||total, status:status||'pendiente', method:method||'Efectivo', user_id:req.user.userId, registrado_por: registradoPor, tenant_id: tid(req) };
+  if (idempotencyKey) accInsert.idempotency_key = idempotencyKey;
+
   var { data: acc, error } = await supabase
     .from('accounts')
-    .insert({ client, total, paid:paid||0, balance:balance||total, status:status||'pendiente', method:method||'Efectivo', user_id:req.user.userId, registrado_por: registradoPor, tenant_id: tid(req) })
+    .insert(accInsert)
     .select().single();
   if (error) { logger.error({ err: error }, '[ACCOUNTS]'); return res.status(500).json({ error: 'Error interno' }); }
   if (items && items.length) {
@@ -44,7 +64,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // POST /api/accounts/:id/payments
-router.post('/:id/payments', auth, async (req, res) => {
+router.post('/:id/payments', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { amount, method, note } = req.body;
   var registradoPor = { name: req.user.name, role: req.user.role };
 

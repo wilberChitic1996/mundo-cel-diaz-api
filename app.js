@@ -62,6 +62,10 @@ app.use('/api/v1/settings', express.json({ limit: '600kb' }));
 // Fotos de reparaciones en base64 pueden pesar hasta ~4MB
 app.use('/api/repairs',     express.json({ limit: '4mb' }));
 app.use('/api/v1/repairs',  express.json({ limit: '4mb' }));
+// Webhooks de pago: necesitan el cuerpo CRUDO para verificar la firma HMAC.
+function captureRawBody(req, _res, buf) { req.rawBody = buf.toString('utf8'); }
+app.use('/api/webhooks',    express.json({ limit: '50kb', verify: captureRawBody }));
+app.use('/api/v1/webhooks', express.json({ limit: '50kb', verify: captureRawBody }));
 app.use(express.json({ limit: '10kb' }));
 
 // v1 routes (nueva convención — mismos handlers, prefijo /api/v1/)
@@ -99,6 +103,11 @@ Object.keys(routes).forEach(function(name) {
 var variantsRouter = require('./routes/variants');
 app.use('/api/products',    variantsRouter);
 app.use('/api/v1/products', variantsRouter);
+
+// Webhooks de pasarela de cobro (cobro recurrente SaaS) — dormido hasta PAYMENTS_ENABLED=true
+var webhooksRouter = require('./routes/webhooks');
+app.use('/api/webhooks',    webhooksRouter);
+app.use('/api/v1/webhooks', webhooksRouter);
 
 app.get('/health', async function(req, res) {
   var total_records = null;

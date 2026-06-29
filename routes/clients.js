@@ -4,6 +4,7 @@ const router   = express.Router();
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
+const { encryptField, decryptField } = require('../utils/crypto');
 const { withTenant, tid } = require('../utils/tenant');
 
 /**
@@ -22,6 +23,8 @@ router.get('/', auth, async (req, res) => {
   q = withTenant(q, req);
   var { data, error } = await q;
   if (error) { logger.error({ err: error }, '[CLIENTS]'); return res.status(500).json({ error: 'Error interno' }); }
+  // Descifrar DPI para el cliente (campo sensible en reposo, A13).
+  (data || []).forEach(function(c) { if (c && c.dpi) c.dpi = decryptField(c.dpi); });
   res.json(data || []);
 });
 
@@ -30,10 +33,12 @@ router.post('/', auth, async (req, res) => {
   var { id, cliCode, name, dpi, nit, phone, address, email, active, createdAt } = req.body;
   var { data, error } = await supabase
     .from('clients')
-    .insert([{ id, cli_code: cliCode, name, dpi: dpi||null, nit: nit||'CF', phone: phone||null, address: address||null, email: email||null, active: active!==false, created_at: createdAt||new Date().toISOString(), tenant_id: tid(req) }])
+    .insert([{ id, cli_code: cliCode, name, dpi: dpi?encryptField(dpi):null, nit: nit||'CF', phone: phone||null, address: address||null, email: email||null, active: active!==false, created_at: createdAt||new Date().toISOString(), tenant_id: tid(req) }])
     .select().single();
   if (error) { logger.error({ err: error }, '[CLIENTS]'); return res.status(500).json({ error: 'Error interno' }); }
-  await logAudit(req.user, 'cliente_creado', 'client', data.id, { nombre: name, codigo: cliCode, nit: nit||'CF', telefono: phone||'—', dpi: dpi||'—' });
+  // A13: no volcar el DPI (dato personal sensible) en texto plano a audit_logs.
+  await logAudit(req.user, 'cliente_creado', 'client', data.id, { nombre: name, codigo: cliCode, nit: nit||'CF', telefono: phone||'—' });
+  if (data && data.dpi) data.dpi = decryptField(data.dpi);
   res.status(201).json(data);
 });
 
@@ -45,13 +50,14 @@ router.put('/:id', auth, async (req, res) => {
 
   var { data, error } = await withTenant(
     supabase.from('clients')
-      .update({ cli_code: cliCode, name, dpi: dpi||null, nit: nit||'CF', phone: phone||null, address: address||null, email: email||null, active: active!==false, updated_at: new Date() })
+      .update({ cli_code: cliCode, name, dpi: dpi?encryptField(dpi):null, nit: nit||'CF', phone: phone||null, address: address||null, email: email||null, active: active!==false, updated_at: new Date() })
       .eq('id', req.params.id),
     req
   ).select().single();
   if (error) { logger.error({ err: error }, '[CLIENTS]'); return res.status(500).json({ error: 'Error interno' }); }
 
-  var CAMPOS = { name:'Nombre', dpi:'DPI', nit:'NIT', phone:'Teléfono', address:'Dirección', email:'Email', active:'Activo' };
+  // A13: 'dpi' NO va en el diff de auditoría (dato personal sensible). Se registra que cambió, sin valores.
+  var CAMPOS = { name:'Nombre', nit:'NIT', phone:'Teléfono', address:'Dirección', email:'Email', active:'Activo' };
   var diff = {};
   if (before) {
     Object.keys(CAMPOS).forEach(function(k){
@@ -60,9 +66,13 @@ router.put('/:id', auth, async (req, res) => {
         diff[CAMPOS[k]] = { antes: viejo||'—', despues: nuevo||'—' };
       }
     });
+    if (dpi !== undefined && String(dpi||'') !== String(decryptField(before.dpi)||'')) {
+      diff['DPI'] = { antes: '(oculto)', despues: '(modificado)' };
+    }
   }
   diff._cliente = before ? before.name : req.params.id;
   await logAudit(req.user, 'cliente_editado', 'client', req.params.id, diff);
+  if (data && data.dpi) data.dpi = decryptField(data.dpi);
   res.json(data);
 });
 

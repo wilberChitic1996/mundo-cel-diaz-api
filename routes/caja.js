@@ -3,6 +3,8 @@ const router   = express.Router();
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const { withTenant, tid } = require('../utils/tenant');
+const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
 
 /**
  * @openapi
@@ -33,7 +35,7 @@ router.get('/sesiones/activa', auth, async (req, res) => {
 });
 
 // POST /api/caja/abrir
-router.post('/abrir', auth, async (req, res) => {
+router.post('/abrir', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { fondo_inicial, nota } = req.body;
   if (fondo_inicial === undefined || fondo_inicial === null) {
     return res.status(400).json({ error: 'fondo_inicial requerido' });
@@ -54,7 +56,7 @@ router.post('/abrir', auth, async (req, res) => {
 });
 
 // POST /api/caja/cerrar/:id
-router.post('/cerrar/:id', auth, async (req, res) => {
+router.post('/cerrar/:id', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { efectivo_contado, nota } = req.body;
 
   var { data, error } = await withTenant(
@@ -84,7 +86,7 @@ router.get('/gastos', auth, async (req, res) => {
 });
 
 // POST /api/caja/gastos
-router.post('/gastos', auth, async (req, res) => {
+router.post('/gastos', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { sesion_id, concepto, monto, categoria } = req.body;
   if (!concepto || !monto) return res.status(400).json({ error: 'concepto y monto requeridos' });
 
