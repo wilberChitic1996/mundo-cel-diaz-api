@@ -132,6 +132,10 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
       return res.status(500).json({ error: 'Error al guardar ítems de venta' });
     }
 
+    // B1: descontar stock; si alguno falla (p.ej. otra venta lo agotó), compensar lo ya
+    // descontado y REVERTIR la venta — antes se ignoraba y quedaba inventario inflado.
+    var decremented = [];
+    var stockErr = null;
     for (var item of items) {
       if (item.id && item.unit !== 'serv') {
         var { error: rpcErr } = await supabase.rpc('decrement_stock', {
@@ -139,8 +143,18 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
           p_qty: item.qty,
           p_tenant_id: tenantId
         });
-        if (rpcErr) logger.error({ err: rpcErr }, '[SALES] decrement_stock RPC error para producto ' + item.id);
+        if (rpcErr) { stockErr = rpcErr; break; }
+        decremented.push(item);
       }
+    }
+    if (stockErr) {
+      for (var dItem of decremented) {
+        await supabase.rpc('increment_stock', { p_product_id: dItem.id, p_qty: dItem.qty, p_tenant_id: tenantId });
+      }
+      await supabase.from('sale_items').delete().eq('sale_id', sale.id).eq('tenant_id', tenantId);
+      await supabase.from('sales').delete().eq('id', sale.id).eq('tenant_id', tenantId);
+      logger.error({ err: stockErr }, '[SALES] venta revertida por fallo al descontar stock');
+      return res.status(409).json({ error: 'No se pudo completar la venta: el stock cambió. Reintentá.' });
     }
 
     await linkSerials(sale.id, items);
@@ -199,6 +213,9 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
       });
     }
 
+    // B1: igual que en contado, pero acá hay que revertir también la cuenta a crédito creada.
+    var decremented2 = [];
+    var stockErr2 = null;
     for (var item2 of items) {
       if (item2.id && item2.unit !== 'serv') {
         var { error: rpcErr2 } = await supabase.rpc('decrement_stock', {
@@ -206,8 +223,22 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
           p_qty: item2.qty,
           p_tenant_id: tenantId
         });
-        if (rpcErr2) logger.error({ err: rpcErr2 }, '[SALES] decrement_stock RPC error para producto ' + item2.id);
+        if (rpcErr2) { stockErr2 = rpcErr2; break; }
+        decremented2.push(item2);
       }
+    }
+    if (stockErr2) {
+      for (var dItem2 of decremented2) {
+        await supabase.rpc('increment_stock', { p_product_id: dItem2.id, p_qty: dItem2.qty, p_tenant_id: tenantId });
+      }
+      // Revertir en orden FK-safe: pagos → ítems de cuenta → cuenta → ítems de venta → venta.
+      await supabase.from('account_payments').delete().eq('account_id', acc.id).eq('tenant_id', tenantId);
+      await supabase.from('account_items').delete().eq('account_id', acc.id).eq('tenant_id', tenantId);
+      await supabase.from('accounts').delete().eq('id', acc.id).eq('tenant_id', tenantId);
+      await supabase.from('sale_items').delete().eq('sale_id', creditSale.id).eq('tenant_id', tenantId);
+      await supabase.from('sales').delete().eq('id', creditSale.id).eq('tenant_id', tenantId);
+      logger.error({ err: stockErr2 }, '[SALES credit] venta a crédito revertida por fallo al descontar stock');
+      return res.status(409).json({ error: 'No se pudo completar la venta a crédito: el stock cambió. Reintentá.' });
     }
 
     await linkSerials(creditSale.id, items);
