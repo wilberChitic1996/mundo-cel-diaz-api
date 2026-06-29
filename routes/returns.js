@@ -36,6 +36,23 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
   const total = (items||[]).reduce(function(s,i){return s+i.price*i.qty;},0);
   const tenantId = tid(req);
 
+  // B5: si la devolución referencia una venta, validar que no exceda lo vendido.
+  if (saleId) {
+    var { data: origSale } = await withTenant(supabase.from('sales').select('id,total').eq('id', saleId), req).maybeSingle();
+    if (!origSale) return res.status(404).json({ error: 'Venta original no encontrada' });
+    if (Number(refundAmount||0) > Number(origSale.total) + 0.01) {
+      return res.status(400).json({ error: 'El reembolso (' + (refundAmount||0) + ') no puede exceder el total de la venta (' + origSale.total + ')' });
+    }
+    var { data: soldItems } = await withTenant(supabase.from('sale_items').select('code,qty').eq('sale_id', saleId), req);
+    var soldByCode = {};
+    (soldItems||[]).forEach(function(si){ soldByCode[si.code] = (soldByCode[si.code]||0) + Number(si.qty); });
+    for (var ri of (items||[])) {
+      if (ri.code && soldByCode[ri.code] !== undefined && Number(ri.qty) > soldByCode[ri.code] + 0.01) {
+        return res.status(400).json({ error: 'No se puede devolver más de lo vendido de "' + (ri.name||ri.code) + '"' });
+      }
+    }
+  }
+
   const { data: ret, error } = await supabase
     .from('returns')
     .insert({ client, sale_id: saleId||null, reason,
@@ -54,10 +71,22 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
 
   if (itemCondition === 'bueno') {
     for (var item of items) {
-      var { data: prod } = await withTenant(supabase.from('products').select('stock').eq('code', item.code), req).single();
-      if (prod) {
-        await withTenant(supabase.from('products').update({ stock: prod.stock + item.qty, updated_at: new Date() }).eq('code', item.code), req);
+      // B5: resolver el producto de forma robusta (por id si viene, si no por código sin .single()).
+      var pid = item.productId || null;
+      if (!pid && item.code) {
+        var { data: pRows } = await withTenant(supabase.from('products').select('id').eq('code', item.code).limit(1), req);
+        if (pRows && pRows.length) pid = pRows[0].id;
       }
+      if (!pid) continue;
+      // B4: reingreso ATÓMICO + movimiento de inventario (entrada por devolución).
+      var { data: newStock, error: incErr } = await supabase.rpc('increment_stock', { p_product_id: pid, p_qty: Number(item.qty), p_tenant_id: tenantId });
+      if (incErr) { logger.error({ err: incErr }, '[RETURNS] increment_stock devolución'); continue; }
+      await supabase.from('stock_movements').insert({
+        tenant_id: tenantId, product_id: pid, type: 'devolucion',
+        qty_before: Number(newStock) - Number(item.qty), qty_change: Number(item.qty), qty_after: Number(newStock),
+        reason: 'Devolución' + (reason ? ' — ' + reason : ''), reference_id: ret.id,
+        user_name: req.user.name, user_role: req.user.role,
+      });
     }
   } else {
     var defItems = items.map(function(i){ return { return_id:ret.id, code:i.code, name:i.name, qty:i.qty, price:i.price, reason:reason, status:'defectuoso', tenant_id: tenantId }; });
