@@ -138,23 +138,32 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     var stockErr = null;
     for (var item of items) {
       if (item.id && item.unit !== 'serv') {
-        var { error: rpcErr } = await supabase.rpc('decrement_stock', {
+        var { data: itemAfter, error: rpcErr } = await supabase.rpc('decrement_stock', {
           p_product_id: item.id,
           p_qty: item.qty,
           p_tenant_id: tenantId
         });
         if (rpcErr) { stockErr = rpcErr; break; }
-        decremented.push(item);
+        decremented.push({ item: item, after: itemAfter });
       }
     }
     if (stockErr) {
-      for (var dItem of decremented) {
-        await supabase.rpc('increment_stock', { p_product_id: dItem.id, p_qty: dItem.qty, p_tenant_id: tenantId });
+      for (var d of decremented) {
+        await supabase.rpc('increment_stock', { p_product_id: d.item.id, p_qty: d.item.qty, p_tenant_id: tenantId });
       }
       await supabase.from('sale_items').delete().eq('sale_id', sale.id).eq('tenant_id', tenantId);
       await supabase.from('sales').delete().eq('id', sale.id).eq('tenant_id', tenantId);
       logger.error({ err: stockErr }, '[SALES] venta revertida por fallo al descontar stock');
       return res.status(409).json({ error: 'No se pudo completar la venta: el stock cambió. Reintentá.' });
+    }
+    // B4: registrar movimientos de inventario (salida por venta), ya confirmada la venta.
+    for (var mv of decremented) {
+      await supabase.from('stock_movements').insert({
+        tenant_id: tenantId, product_id: mv.item.id, type: 'venta',
+        qty_before: Number(mv.after) + Number(mv.item.qty), qty_change: -Number(mv.item.qty), qty_after: Number(mv.after),
+        reason: 'Venta', reference_id: sale.id,
+        user_name: req.user.name, user_role: req.user.role,
+      });
     }
 
     await linkSerials(sale.id, items);
@@ -218,18 +227,18 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     var stockErr2 = null;
     for (var item2 of items) {
       if (item2.id && item2.unit !== 'serv') {
-        var { error: rpcErr2 } = await supabase.rpc('decrement_stock', {
+        var { data: item2After, error: rpcErr2 } = await supabase.rpc('decrement_stock', {
           p_product_id: item2.id,
           p_qty: item2.qty,
           p_tenant_id: tenantId
         });
         if (rpcErr2) { stockErr2 = rpcErr2; break; }
-        decremented2.push(item2);
+        decremented2.push({ item: item2, after: item2After });
       }
     }
     if (stockErr2) {
-      for (var dItem2 of decremented2) {
-        await supabase.rpc('increment_stock', { p_product_id: dItem2.id, p_qty: dItem2.qty, p_tenant_id: tenantId });
+      for (var d2 of decremented2) {
+        await supabase.rpc('increment_stock', { p_product_id: d2.item.id, p_qty: d2.item.qty, p_tenant_id: tenantId });
       }
       // Revertir en orden FK-safe: pagos → ítems de cuenta → cuenta → ítems de venta → venta.
       await supabase.from('account_payments').delete().eq('account_id', acc.id).eq('tenant_id', tenantId);
@@ -239,6 +248,15 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
       await supabase.from('sales').delete().eq('id', creditSale.id).eq('tenant_id', tenantId);
       logger.error({ err: stockErr2 }, '[SALES credit] venta a crédito revertida por fallo al descontar stock');
       return res.status(409).json({ error: 'No se pudo completar la venta a crédito: el stock cambió. Reintentá.' });
+    }
+    // B4: registrar movimientos de inventario (salida por venta a crédito).
+    for (var mv2 of decremented2) {
+      await supabase.from('stock_movements').insert({
+        tenant_id: tenantId, product_id: mv2.item.id, type: 'venta',
+        qty_before: Number(mv2.after) + Number(mv2.item.qty), qty_change: -Number(mv2.item.qty), qty_after: Number(mv2.after),
+        reason: 'Venta a crédito', reference_id: creditSale.id,
+        user_name: req.user.name, user_role: req.user.role,
+      });
     }
 
     await linkSerials(creditSale.id, items);
