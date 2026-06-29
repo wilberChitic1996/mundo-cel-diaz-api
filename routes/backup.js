@@ -5,7 +5,7 @@ const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const logger   = require('../utils/logger');
 const { withTenant, tid } = require('../utils/tenant');
-const { createTenantBackup, getBackupDownloadUrl } = require('../utils/backup');
+const { createTenantBackup, getBackupDownloadUrl, getBackupData } = require('../utils/backup');
 
 // GET /api/backup/health — estado del último backup + timestamp último éxito
 router.get('/health', auth, async function(req, res) {
@@ -113,12 +113,13 @@ router.get('/:id/download', auth, async function(req, res) {
   }
 });
 
-// GET /api/backup/:id/data — devuelve el JSON del backup directamente (evita CORS de Storage)
+// GET /api/backup/:id/data — contenido JSON del backup (para exportar a Excel)
 router.get('/:id/data', auth, async function(req, res) {
   var tenantId = tid(req);
   if (!tenantId) return res.status(403).json({ error: 'Tenant requerido' });
 
   try {
+    // Verificar que el backup pertenece al tenant
     var { data, error } = await supabase
       .from('backups')
       .select('id, storage_path, status')
@@ -130,14 +131,10 @@ router.get('/:id/data', auth, async function(req, res) {
     if (data.status !== 'success') return res.status(400).json({ error: 'Backup no disponible' });
     if (!data.storage_path) return res.status(400).json({ error: 'Sin archivo de almacenamiento' });
 
-    var downloadRes = await supabase.storage.from('backups').download(data.storage_path);
-    if (downloadRes.error) return res.status(500).json({ error: 'Error leyendo archivo de backup' });
-
-    var text = await downloadRes.data.text();
-    var parsed = JSON.parse(text);
-    res.json(parsed);
+    var payload = await getBackupData(data.storage_path);
+    res.json(payload);
   } catch (err) {
-    logger.error({ err, tenant_id: tenantId, backup_id: req.params.id }, '[BACKUP] Error sirviendo datos de backup');
+    logger.error({ err, tenant_id: tenantId, backup_id: req.params.id }, '[BACKUP] Error obteniendo datos del backup');
     res.status(500).json({ error: 'Error al obtener datos del backup' });
   }
 });
