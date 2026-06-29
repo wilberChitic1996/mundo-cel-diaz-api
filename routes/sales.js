@@ -8,6 +8,7 @@ const { withTenant, tid } = require('../utils/tenant');
 const requireRole = require('../middleware/requireRole');
 const enforceSubscription = require('../middleware/enforceSubscription');
 const felService = require('../services/felService');
+const { parsePaging } = require('../utils/paging');
 
 /**
  * @openapi
@@ -19,12 +20,16 @@ const felService = require('../services/felService');
  *       200:
  *         description: OK
  */
-// GET /api/sales
+// GET /api/sales  — paginación opcional (?page&limit); sin params devuelve todo (compat).
 router.get('/', auth, async (req, res) => {
-  var q = supabase.from('sales').select('*, sale_items(*)').order('created_at', { ascending: false });
+  var pg = parsePaging(req.query);
+  var q = supabase.from('sales').select('*, sale_items(*)', pg.hasPaging ? { count: 'exact' } : undefined)
+    .order('created_at', { ascending: false });
   q = withTenant(q, req);
-  var { data, error } = await q;
+  if (pg.hasPaging) q = q.range(pg.from, pg.to);
+  var { data, error, count } = await q;
   if (error) { logger.error({ err: error }, '[SALES]'); return res.status(500).json({ error: 'Error interno' }); }
+  if (pg.hasPaging) return res.json({ data: data || [], total: count || 0, page: pg.page, limit: pg.limit });
   res.json(data);
 });
 

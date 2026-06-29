@@ -7,6 +7,7 @@ const logAudit  = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
 const requireRole = require('../middleware/requireRole');
 const enforceSubscription = require('../middleware/enforceSubscription');
+const { parsePaging } = require('../utils/paging');
 
 /**
  * @openapi
@@ -18,12 +19,16 @@ const enforceSubscription = require('../middleware/enforceSubscription');
  *       200:
  *         description: OK
  */
-// GET /api/accounts
+// GET /api/accounts — paginación opcional (?page&limit); sin params devuelve todo (compat).
 router.get('/', auth, async (req, res) => {
-  var q = supabase.from('accounts').select('*, account_items(*), account_payments(*)').order('created_at', { ascending: false });
+  var pg = parsePaging(req.query);
+  var q = supabase.from('accounts').select('*, account_items(*), account_payments(*)', pg.hasPaging ? { count: 'exact' } : undefined)
+    .order('created_at', { ascending: false });
   q = withTenant(q, req);
-  var { data, error } = await q;
+  if (pg.hasPaging) q = q.range(pg.from, pg.to);
+  var { data, error, count } = await q;
   if (error) { logger.error({ err: error }, '[ACCOUNTS]'); return res.status(500).json({ error: 'Error interno' }); }
+  if (pg.hasPaging) return res.json({ data: data || [], total: count || 0, page: pg.page, limit: pg.limit });
   res.json(data);
 });
 
