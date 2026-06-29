@@ -5,6 +5,7 @@ const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
+const requireRole = require('../middleware/requireRole');
 
 /**
  * @openapi
@@ -26,7 +27,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/returns
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireRole('admin', 'cajero'), async (req, res) => {
   const { client, saleId, reason, refundMethod, refundAmount, itemCondition, items } = req.body;
   if (!['bueno', 'defectuoso'].includes(itemCondition)) {
     return res.status(400).json({ error: 'itemCondition debe ser "bueno" o "defectuoso"' });
