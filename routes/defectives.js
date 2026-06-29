@@ -5,6 +5,7 @@ const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
+const cache    = require('../utils/cache');
 
 /**
  * @openapi
@@ -49,6 +50,8 @@ router.put('/:id', auth, async (req, res) => {
         });
       }
     }
+    // C3: el reingreso cambió stock → invalidar la caché de la lista de productos.
+    await cache.del('products:' + tid(req));
   }
 
   var { data, error } = await withTenant(
