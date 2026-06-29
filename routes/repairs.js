@@ -49,14 +49,8 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     .select().single();
   if (error) { logger.error({ err: error }, '[REPAIRS]'); return res.status(500).json({ error: 'Error interno' }); }
 
-  // Brecha #3: persistir repuestos en tabla relacional repair_items
-  if (b.parts && b.parts.length > 0) {
-    var items = b.parts.map(function(p) {
-      return { tenant_id: tid(req), repair_id: data.id, product_id: p.productId||null, code: p.code, name: p.name, qty: p.qty||1, cost: p.price||0 };
-    });
-    var { error: riErr } = await supabase.from('repair_items').insert(items);
-    if (riErr) logger.error({ err: riErr }, '[REPAIRS] repair_items insert');
-  }
+  // D5: los repuestos viven en repairs.parts (jsonb), que es lo que la app lee.
+  // Se eliminó el doble-guardado a la tabla repair_items (dead-write nunca leído).
 
   await logAudit(req.user, 'reparacion_creada', 'repair', data.id, {
     codigo: b.repCode, cliente: b.clientName, equipo: (b.brand||'')+(b.model?' '+b.model:''),
@@ -116,17 +110,7 @@ router.put('/:id', auth, requireRole('admin', 'cajero'), enforceSubscription, as
   }
   diff._reparacion = before ? ((before.rep_code||'')+' — '+(before.client_name||'')) : req.params.id;
 
-  // Brecha #3: sincronizar repair_items cuando se actualizan los repuestos
-  if (b.parts !== undefined) {
-    await supabase.from('repair_items').delete().eq('repair_id', req.params.id).eq('tenant_id', tid(req));
-    if (b.parts && b.parts.length > 0) {
-      var riRows = b.parts.map(function(p) {
-        return { tenant_id: tid(req), repair_id: req.params.id, product_id: p.productId||null, code: p.code, name: p.name, qty: p.qty||1, cost: p.price||0 };
-      });
-      var { error: riErr2 } = await supabase.from('repair_items').insert(riRows);
-      if (riErr2) logger.error({ err: riErr2 }, '[REPAIRS] repair_items update');
-    }
-  }
+  // D5: repuestos en repairs.parts (jsonb); se quitó el doble-guardado a repair_items.
 
   await logAudit(req.user, 'reparacion_editada', 'repair', req.params.id, diff);
   res.json(data);
