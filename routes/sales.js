@@ -5,6 +5,8 @@ const auth      = require('../middleware/auth');
 const supabase  = require('../supabase');
 const logAudit  = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
+const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
 
 /**
  * @openapi
@@ -26,7 +28,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/sales
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { client, total, method, items, payType, initialPay, idempotencyKey, nota, ivaPct, secondMethod, secondAmount, repairId } = req.body;
 
   // Marca una reparación como entregada (cobrada) — evita cobros duplicados

@@ -6,7 +6,12 @@ const crypto    = require('crypto');
 const bcrypt    = require('bcryptjs');
 const supabase  = require('../supabase');
 const logAudit  = require('../utils/audit');
+const cache     = require('../utils/cache');
 const { withTenant, tid } = require('../utils/tenant');
+
+// Roles que un admin de tenant puede asignar. NUNCA 'superadmin': ese rol rompe el
+// aislamiento multi-tenant (withTenant no filtra por tenant cuando el rol es superadmin).
+const TENANT_ROLES = ['admin', 'cajero', 'auditor'];
 
 async function hashPassword(password) {
   return bcrypt.hash(password, 10);
@@ -41,6 +46,11 @@ router.post('/', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
   const { name, email, password, role, secQuestion, secAnswer } = req.body;
 
+  // Seguridad multi-tenant: un admin solo puede asignar roles de su tenant (nunca superadmin).
+  if (!TENANT_ROLES.includes(role)) {
+    return res.status(400).json({ error: 'Rol inválido' });
+  }
+
   const row = {
     name,
     email: email.toLowerCase(),
@@ -65,6 +75,17 @@ router.post('/', auth, async (req, res) => {
 router.put('/:id', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
   const b = req.body || {};
+
+  // Seguridad multi-tenant: no permitir asignar un rol fuera de la lista (nunca superadmin).
+  if (b.role !== undefined && !TENANT_ROLES.includes(b.role)) {
+    return res.status(400).json({ error: 'Rol inválido' });
+  }
+  // Un admin no puede cambiarse su propio rol ni desactivar su propia cuenta
+  // (evita auto-bloqueo y cierra otro vector de manipulación de privilegios).
+  if (String(req.user.userId) === String(req.params.id) && (b.role !== undefined || b.active === false)) {
+    return res.status(400).json({ error: 'No podés cambiar tu propio rol ni desactivar tu cuenta' });
+  }
+
   const updates = { updated_at: new Date() };
 
   if (b.name   !== undefined) updates.name   = b.name;
@@ -82,6 +103,10 @@ router.put('/:id', auth, async (req, res) => {
     req
   ).select('id,name,email,role,active,sec_question').single();
   if (error) { logger.error({ err: error }, '[USERS]'); return res.status(500).json({ error: 'Error interno' }); }
+
+  // Revocación de sesión inmediata: invalidar el estado cacheado del usuario para que
+  // un cambio de `active`/`role` se refleje en el próximo request (ver middleware/auth.js).
+  await cache.del('usr:' + req.params.id);
 
   var CAMPOS_U = { name:'Nombre', email:'Email', role:'Rol', active:'Activo' };
   var diff = {};
