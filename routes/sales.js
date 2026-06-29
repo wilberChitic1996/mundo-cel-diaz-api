@@ -7,6 +7,7 @@ const logAudit  = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
 const requireRole = require('../middleware/requireRole');
 const enforceSubscription = require('../middleware/enforceSubscription');
+const felService = require('../services/felService');
 
 /**
  * @openapi
@@ -141,6 +142,10 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
 
     await marcarReparacionEntregada();
 
+    // FEL (facturación electrónica): dormido por defecto; certifica solo si FEL_ENABLED=true.
+    // Fail-safe: nunca rompe la venta (si falla, queda reintentable vía POST /:id/emit-fel).
+    await felService.certifySale(sale.id, tenantId);
+
     await logAudit(req.user, 'venta_completada', 'sale', sale.id, {
       cliente: client, total, metodo: method||'Efectivo',
       articulos: items.map(function(i){ return i.name+' x'+i.qty; }).join(', ')
@@ -204,12 +209,27 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
 
     await marcarReparacionEntregada();
 
+    // FEL: dormido por defecto; certifica la venta a crédito solo si FEL_ENABLED=true.
+    await felService.certifySale(creditSale.id, tenantId);
+
     await logAudit(req.user, 'cuenta_creada', 'account', acc.id, {
       cliente: client, total, abono_inicial: paid, tipo: payType,
       articulos: items.map(function(i){ return i.name+' x'+i.qty; }).join(', ')
     });
     return res.status(201).json({ type:'account', sale_id: creditSale.id, ...acc });
   }
+});
+
+// POST /api/sales/:id/emit-fel — reintentar la certificación FEL de una venta (si quedó en error).
+router.post('/:id/emit-fel', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
+  // Verificar que la venta pertenece al tenant antes de certificar.
+  var { data: sale } = await withTenant(supabase.from('sales').select('id').eq('id', req.params.id), req).maybeSingle();
+  if (!sale) return res.status(404).json({ error: 'Venta no encontrada' });
+
+  var result = await felService.certifySale(req.params.id, tid(req));
+  if (result.status === 'disabled') return res.status(503).json({ error: 'FEL no está habilitado', code: 'FEL_DISABLED' });
+  if (!result.ok) return res.status(502).json({ error: 'No se pudo certificar', detail: result.error });
+  res.json({ ok: true, fel: result.data });
 });
 
 module.exports = router;
