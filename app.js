@@ -50,8 +50,9 @@ app.use(cors({
     if (!origin) return cb(null, true);
     // Orígenes explícitos desde FRONTEND_URL env var
     if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) return cb(null, true);
-    // Permitir todos los dominios de Vercel (staging y PR previews)
-    if (origin.endsWith('.vercel.app')) return cb(null, true);
+    // C5: solo los despliegues de NUESTRO proyecto en Vercel (staging + PR previews
+    // del proyecto mundo-cel-diaz), no cualquier *.vercel.app de terceros.
+    if (/^https:\/\/mundo-cel-diaz[a-z0-9-]*\.vercel\.app$/i.test(origin)) return cb(null, true);
     cb(new Error('CORS no permitido: ' + origin));
   },
   credentials: true
