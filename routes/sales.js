@@ -9,6 +9,7 @@ const requireRole = require('../middleware/requireRole');
 const enforceSubscription = require('../middleware/enforceSubscription');
 const felService = require('../services/felService');
 const { parsePaging } = require('../utils/paging');
+const cache     = require('../utils/cache');
 
 /**
  * @openapi
@@ -167,6 +168,8 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     }
 
     await linkSerials(sale.id, items);
+    // C3: el stock cambió por la venta → invalidar la caché de la lista de productos.
+    await cache.del('products:' + tenantId);
 
     await marcarReparacionEntregada();
 
@@ -260,6 +263,8 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     }
 
     await linkSerials(creditSale.id, items);
+    // C3: el stock cambió por la venta a crédito → invalidar la caché de productos.
+    await cache.del('products:' + tenantId);
 
     await marcarReparacionEntregada();
 

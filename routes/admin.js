@@ -229,34 +229,23 @@ router.delete('/tenants/:id', auth, superadminOnly, async (req, res) => {
   var id = req.params.id;
   var deleteErrors = [];
 
-  // Tablas con tenant_id directo — borrar en orden FK-safe
-  var directTables = [
-    'audit_logs','caja_gastos','caja_sesiones','warranties','defectives',
-    'returns','sales','repairs','purchases','suppliers','products','clients',
-    'store_settings','accounts','users'
+  // C4: borrar TODAS las tablas con tenant_id en orden FK-safe (dependientes primero).
+  // Antes faltaban stock_movements/product_serials/product_variants/repair_items (FK a products,
+  // hacían fallar el DELETE de products), categories/locations, push_subscriptions/refresh_tokens,
+  // backups y payment_webhooks → quedaba 500 o datos huérfanos.
+  var orderedTables = [
+    // 1) dependientes que referencian a otras tablas (primero)
+    'stock_movements', 'product_serials', 'product_variants', 'repair_items',
+    'sale_items', 'return_items', 'account_items', 'account_payments', 'purchase_items',
+    'caja_gastos', 'push_subscriptions', 'refresh_tokens',
+    // 2) cuentas antes que ventas/clientes; luego entidades de nivel medio
+    'accounts', 'sales', 'returns', 'purchases', 'repairs', 'caja_sesiones',
+    'defectives', 'warranties', 'audit_logs', 'backups', 'payment_webhooks', 'store_settings',
+    // 3) catálogos/entidades raíz del tenant (tras sus dependientes)
+    'products', 'categories', 'locations', 'suppliers', 'clients', 'users',
   ];
 
-  // Tablas hijo sin tenant_id — borrar vía FK de la tabla padre
-  var childDeletes = [
-    { child: 'sale_items',      fkCol: 'sale_id',     parent: 'sales' },
-    { child: 'account_items',   fkCol: 'account_id',  parent: 'accounts' },
-    { child: 'account_payments',fkCol: 'account_id',  parent: 'accounts' },
-    { child: 'return_items',    fkCol: 'return_id',   parent: 'returns' },
-    { child: 'purchase_items',  fkCol: 'purchase_id', parent: 'purchases' },
-  ];
-
-  // 1. Borrar tablas hijo primero (antes de borrar padres)
-  for (var cd of childDeletes) {
-    var { data: parentIds } = await supabase.from(cd.parent).select('id').eq('tenant_id', id);
-    if (parentIds && parentIds.length) {
-      var ids = parentIds.map(function(r){ return r.id; });
-      var { error: cdErr } = await supabase.from(cd.child).delete().in(cd.fkCol, ids);
-      if (cdErr) { logger.error({ err: cdErr }, '[ADMIN] Error al eliminar ' + cd.child); deleteErrors.push(cd.child); }
-    }
-  }
-
-  // 2. Borrar tablas directas
-  for (var table of directTables) {
+  for (var table of orderedTables) {
     var { error: tErr } = await supabase.from(table).delete().eq('tenant_id', id);
     if (tErr) { logger.error({ err: tErr }, '[ADMIN] Error al eliminar tabla ' + table); deleteErrors.push(table); }
   }
