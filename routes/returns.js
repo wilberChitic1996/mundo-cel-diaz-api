@@ -7,6 +7,7 @@ const logAudit = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
 const requireRole = require('../middleware/requireRole');
 const enforceSubscription = require('../middleware/enforceSubscription');
+const cache    = require('../utils/cache');
 
 /**
  * @openapi
@@ -88,6 +89,8 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
         user_name: req.user.name, user_role: req.user.role,
       });
     }
+    // C3: el reingreso cambió stock → invalidar la caché de la lista de productos.
+    await cache.del('products:' + tenantId);
   } else {
     var defItems = items.map(function(i){ return { return_id:ret.id, code:i.code, name:i.name, qty:i.qty, price:i.price, reason:reason, status:'defectuoso', tenant_id: tenantId }; });
     await supabase.from('defectives').insert(defItems);

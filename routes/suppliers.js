@@ -5,6 +5,9 @@ const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
+const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
+const cache    = require('../utils/cache');
 
 // ── PROVEEDORES ───────────────────────────────────────
 
@@ -28,8 +31,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/suppliers
-router.post('/', auth, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+router.post('/', auth, requireRole('admin'), enforceSubscription, async (req, res) => {
   var { name, nit, phone, email, address, notes } = req.body;
   if (!name) return res.status(400).json({ error: 'Nombre requerido' });
   var { data, error } = await supabase
@@ -40,8 +42,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PUT /api/suppliers/:id
-router.put('/:id', auth, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+router.put('/:id', auth, requireRole('admin'), enforceSubscription, async (req, res) => {
   var { name, nit, phone, email, address, notes, active } = req.body;
   var updates = {};
   if (name     !== undefined) updates.name    = name;
@@ -69,8 +70,7 @@ router.get('/purchases', auth, async (req, res) => {
 });
 
 // POST /api/suppliers/purchases
-router.post('/purchases', auth, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+router.post('/purchases', auth, requireRole('admin'), enforceSubscription, async (req, res) => {
   var { supplierId, supplierName, items, notes, hasFactura, supplierNit, facturaNumero, ivaAmount } = req.body;
   if (!supplierName || !items || !items.length) {
     return res.status(400).json({ error: 'supplierName e items requeridos' });
@@ -119,6 +119,9 @@ router.post('/purchases', auth, async (req, res) => {
       user_name: req.user.name, user_role: req.user.role,
     });
   }
+
+  // C3: el stock cambió por la compra → invalidar la caché de la lista de productos.
+  await cache.del('products:' + tenantId);
 
   await logAudit(req.user, 'compra_registrada', 'purchase', purchase.id, {
     proveedor: supplierName, articulos: items.length, total: total,

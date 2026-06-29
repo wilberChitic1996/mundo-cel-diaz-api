@@ -65,7 +65,7 @@ router.get('/products/:productId/serials', authMiddleware, async function(req, r
     res.json(data || []);
   } catch (err) {
     logger.error({ err }, 'Error listando seriales');
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
@@ -128,7 +128,7 @@ router.post('/products/:productId/serials', authMiddleware, async function(req, 
     });
   } catch (err) {
     logger.error({ err }, 'Error agregando seriales');
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
@@ -171,7 +171,7 @@ router.put('/products/:productId/serials/:id', authMiddleware, async function(re
     res.json(data);
   } catch (err) {
     logger.error({ err }, 'Error actualizando serial');
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
@@ -210,7 +210,7 @@ router.delete('/products/:productId/serials/:id', authMiddleware, async function
     res.json({ ok: true, imei: serial.imei });
   } catch (err) {
     logger.error({ err }, 'Error eliminando serial');
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
@@ -233,7 +233,7 @@ router.get('/serials/search', authMiddleware, async function(req, res) {
     res.json(data || []);
   } catch (err) {
     logger.error({ err }, 'Error buscando serial');
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
