@@ -65,16 +65,27 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
 
 // POST /api/accounts/:id/payments
 router.post('/:id/payments', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
-  var { amount, method, note } = req.body;
+  var { amount, method, note, idempotencyKey } = req.body;
   var registradoPor = { name: req.user.name, role: req.user.role };
 
   // Verificar que la cuenta pertenece al tenant del usuario antes de registrar el pago
   var { data: acc, error: accErr } = await withTenant(supabase.from('accounts').select('id,total').eq('id', req.params.id), req).single();
   if (accErr || !acc) return res.status(404).json({ error: 'Cuenta no encontrada' });
 
+  // Idempotencia (B2): evita duplicar el abono por doble-click o reintento de red.
+  // Si llega de nuevo la misma clave, se devuelve el abono ya registrado sin recalcular el saldo.
+  if (idempotencyKey) {
+    var { data: existingPmt } = await withTenant(
+      supabase.from('account_payments').select('*').eq('idempotency_key', idempotencyKey), req
+    ).maybeSingle();
+    if (existingPmt) return res.status(200).json(existingPmt);
+  }
+
+  var pmtInsert = { account_id:req.params.id, amount, method:method||'Efectivo', note:note||'', registrado_por: registradoPor, tenant_id: tid(req) };
+  if (idempotencyKey) pmtInsert.idempotency_key = idempotencyKey;
   var { data: pmt, error: pErr } = await supabase
     .from('account_payments')
-    .insert({ account_id:req.params.id, amount, method:method||'Efectivo', note:note||'', registrado_por: registradoPor, tenant_id: tid(req) })
+    .insert(pmtInsert)
     .select().single();
   if (pErr) { logger.error({ err: pErr }, '[ACCOUNTS]'); return res.status(500).json({ error: 'Error interno' }); }
 
