@@ -230,12 +230,12 @@ router.delete('/tenants/:id', auth, superadminOnly, async (req, res) => {
   var deleteErrors = [];
 
   // C4: borrar TODAS las tablas con tenant_id en orden FK-safe (dependientes primero).
-  // Antes faltaban stock_movements/product_serials/product_variants/repair_items (FK a products,
+  // Antes faltaban stock_movements/product_serials/product_variants (FK a products,
   // hacían fallar el DELETE de products), categories/locations, push_subscriptions/refresh_tokens,
   // backups y payment_webhooks → quedaba 500 o datos huérfanos.
   var orderedTables = [
     // 1) dependientes que referencian a otras tablas (primero)
-    'stock_movements', 'product_serials', 'product_variants', 'repair_items',
+    'stock_movements', 'product_serials', 'product_variants',
     'sale_items', 'return_items', 'account_items', 'account_payments', 'purchase_items',
     'caja_gastos', 'push_subscriptions', 'refresh_tokens',
     // 2) cuentas antes que ventas/clientes; luego entidades de nivel medio
