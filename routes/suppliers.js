@@ -1,3 +1,4 @@
+const logger   = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
 const auth     = require('../middleware/auth');
@@ -103,12 +104,20 @@ router.post('/purchases', auth, async (req, res) => {
   for (var i = 0; i < items.length; i++) {
     var it = items[i];
     if (!it.productId) continue;
-    var { data: prod } = await withTenant(supabase.from('products').select('stock,cost').eq('id', it.productId), req).single();
-    if (!prod) continue;
-    var newStock = Number(prod.stock || 0) + Number(it.qty);
-    var updateFields = { stock: newStock };
-    if (it.updateCost && it.cost > 0) updateFields.cost = Number(it.cost);
-    await withTenant(supabase.from('products').update(updateFields).eq('id', it.productId), req);
+    // B4: suma de stock ATÓMICA (evita race en compras concurrentes) en vez de leer-y-escribir.
+    var { data: newStock, error: incErr } = await supabase.rpc('increment_stock', { p_product_id: it.productId, p_qty: Number(it.qty), p_tenant_id: tenantId });
+    if (incErr) { logger.error({ err: incErr }, '[SUPPLIERS] increment_stock compra'); continue; }
+    // El costo se actualiza aparte (la función de stock no lo toca), solo si se pidió.
+    if (it.updateCost && it.cost > 0) {
+      await withTenant(supabase.from('products').update({ cost: Number(it.cost) }).eq('id', it.productId), req);
+    }
+    // B4: registrar el movimiento de inventario (entrada por compra).
+    await supabase.from('stock_movements').insert({
+      tenant_id: tenantId, product_id: it.productId, type: 'compra',
+      qty_before: Number(newStock) - Number(it.qty), qty_change: Number(it.qty), qty_after: Number(newStock),
+      reason: 'Compra a ' + supplierName, reference_id: purchase.id,
+      user_name: req.user.name, user_role: req.user.role,
+    });
   }
 
   await logAudit(req.user, 'compra_registrada', 'purchase', purchase.id, {
