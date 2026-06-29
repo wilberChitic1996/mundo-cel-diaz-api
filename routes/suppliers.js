@@ -70,7 +70,7 @@ router.get('/purchases', auth, async (req, res) => {
 // POST /api/suppliers/purchases
 router.post('/purchases', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
-  var { supplierId, supplierName, items, notes } = req.body;
+  var { supplierId, supplierName, items, notes, hasFactura, supplierNit, facturaNumero, ivaAmount } = req.body;
   if (!supplierName || !items || !items.length) {
     return res.status(400).json({ error: 'supplierName e items requeridos' });
   }
@@ -78,9 +78,19 @@ router.post('/purchases', auth, async (req, res) => {
   var total = items.reduce(function(s, i) { return s + Number(i.subtotal || 0); }, 0);
   var tenantId = tid(req);
 
+  // Crédito fiscal: solo se guarda IVA/NIT/N° factura si la compra tuvo factura.
+  var conFactura = !!hasFactura;
+
   var { data: purchase, error: pErr } = await supabase
     .from('purchases')
-    .insert({ supplier_id: supplierId || null, supplier_name: supplierName, total, notes: notes || null, registered_by: req.user.name, tenant_id: tenantId })
+    .insert({
+      supplier_id: supplierId || null, supplier_name: supplierName, total, notes: notes || null,
+      registered_by: req.user.name, tenant_id: tenantId,
+      has_factura: conFactura,
+      supplier_nit: conFactura ? (supplierNit || null) : null,
+      factura_numero: conFactura ? (facturaNumero || null) : null,
+      iva_amount: conFactura ? (Number(ivaAmount) || 0) : 0,
+    })
     .select().single();
   if (pErr) return res.status(500).json({ error: 'Error interno al crear compra' });
 
