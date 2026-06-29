@@ -6,6 +6,7 @@ const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
 const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
 
 /**
  * @openapi
@@ -27,7 +28,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/warranties
-router.post('/', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { entityType, entityId, client, description, startDate, endDate, months } = req.body;
   var start = startDate || new Date().toISOString().split('T')[0];
   var end = endDate;
@@ -46,7 +47,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), async (req, res) => {
 });
 
 // PUT /api/warranties/:id
-router.put('/:id', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.put('/:id', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { status, description, endDate } = req.body;
   var updates = { updated_at: new Date() };
   if (status)      updates.status      = status;

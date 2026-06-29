@@ -6,6 +6,7 @@ const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
 const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
 
 /**
  * @openapi
@@ -27,7 +28,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/repairs
-router.post('/', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var b = req.body;
   var { data, error } = await supabase
     .from('repairs')
@@ -65,7 +66,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), async (req, res) => {
 });
 
 // PUT /api/repairs/:id/status
-router.put('/:id/status', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.put('/:id/status', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { status } = req.body;
   var { data: before } = await withTenant(supabase.from('repairs').select('status,rep_code,client_name,brand,model').eq('id', req.params.id), req).single();
   var { data, error } = await withTenant(
@@ -81,7 +82,7 @@ router.put('/:id/status', auth, requireRole('admin', 'cajero'), async (req, res)
 });
 
 // PUT /api/repairs/:id
-router.put('/:id', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.put('/:id', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var b = req.body;
   var { data: before } = await withTenant(supabase.from('repairs').select('*').eq('id', req.params.id), req).single();
   var { data, error } = await withTenant(
@@ -133,7 +134,7 @@ router.put('/:id', auth, requireRole('admin', 'cajero'), async (req, res) => {
 
 // POST /api/repairs/:id/photos — sube foto en base64 a Supabase Storage
 // Body: { base64: '...', mimeType: 'image/jpeg', photoType: 'reception'|'delivery' }
-router.post('/:id/photos', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.post('/:id/photos', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var tenantId = tid(req);
   var { base64, mimeType, photoType } = req.body;
   if (!base64) return res.status(400).json({ error: 'Se requiere la imagen en base64' });
@@ -172,7 +173,7 @@ router.post('/:id/photos', auth, requireRole('admin', 'cajero'), async (req, res
 
 // DELETE /api/repairs/:id/photos — elimina una foto del arreglo
 // Body: { url: '...', photoType: 'reception'|'delivery' }
-router.delete('/:id/photos', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.delete('/:id/photos', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var tenantId = tid(req);
   var { url, photoType } = req.body;
   if (!url || !['reception', 'delivery'].includes(photoType)) return res.status(400).json({ error: 'url y photoType requeridos' });
@@ -195,7 +196,7 @@ router.delete('/:id/photos', auth, requireRole('admin', 'cajero'), async (req, r
 });
 
 // DELETE /api/repairs/:id
-router.delete('/:id', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.delete('/:id', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { data: before } = await withTenant(supabase.from('repairs').select('rep_code,client_name,brand,model').eq('id', req.params.id), req).single();
   var { error } = await withTenant(supabase.from('repairs').delete().eq('id', req.params.id), req);
   if (error) { logger.error({ err: error }, '[REPAIRS]'); return res.status(500).json({ error: 'Error interno' }); }

@@ -2,11 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
-// supabase no debe alcanzarse en caminos rechazados por RBAC (403) ni por validación (400).
-vi.mock('../supabase', () => ({
-  default: { from: () => { throw new Error('Supabase no debería alcanzarse en un camino rechazado'); } },
-}));
-
+// El orden de middleware es `auth → requireRole → enforceSubscription`, así que un rol no
+// autorizado se rechaza con 403 ANTES de cualquier consulta a la BD: estos tests miden RBAC puro.
 vi.mock('../middleware/rateLimit', () => ({
   loginLimiter:    (_req, _res, next) => next(),
   recoveryLimiter: (_req, _res, next) => next(),

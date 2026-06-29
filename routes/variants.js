@@ -6,6 +6,7 @@ const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
 const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
 
 // GET /api/products/:id/variants
 router.get('/:id/variants', auth, async (req, res) => {
@@ -17,7 +18,7 @@ router.get('/:id/variants', auth, async (req, res) => {
 });
 
 // POST /api/products/:id/variants
-router.post('/:id/variants', auth, requireRole('admin'), async (req, res) => {
+router.post('/:id/variants', auth, requireRole('admin'), enforceSubscription, async (req, res) => {
   var { color, capacity, sku, stock, price, cost } = req.body;
   var tenantId = tid(req);
   var { data, error } = await supabase.from('product_variants').insert({
@@ -32,7 +33,7 @@ router.post('/:id/variants', auth, requireRole('admin'), async (req, res) => {
 });
 
 // PUT /api/products/:id/variants/:vid
-router.put('/:id/variants/:vid', auth, requireRole('admin'), async (req, res) => {
+router.put('/:id/variants/:vid', auth, requireRole('admin'), enforceSubscription, async (req, res) => {
   var { color, capacity, sku, stock, price, cost, active } = req.body;
   var { data, error } = await withTenant(
     supabase.from('product_variants').update({
@@ -48,7 +49,7 @@ router.put('/:id/variants/:vid', auth, requireRole('admin'), async (req, res) =>
 });
 
 // DELETE /api/products/:id/variants/:vid
-router.delete('/:id/variants/:vid', auth, requireRole('admin'), async (req, res) => {
+router.delete('/:id/variants/:vid', auth, requireRole('admin'), enforceSubscription, async (req, res) => {
   var { error } = await withTenant(
     supabase.from('product_variants').delete().eq('id', req.params.vid).eq('product_id', req.params.id),
     req

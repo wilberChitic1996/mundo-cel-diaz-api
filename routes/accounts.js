@@ -6,6 +6,7 @@ const supabase  = require('../supabase');
 const logAudit  = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
 const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
 
 /**
  * @openapi
@@ -27,7 +28,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/accounts
-router.post('/', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { client, total, paid, balance, status, method, items } = req.body;
   var registradoPor = { name: req.user.name, role: req.user.role };
   var { data: acc, error } = await supabase
@@ -45,7 +46,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), async (req, res) => {
 });
 
 // POST /api/accounts/:id/payments
-router.post('/:id/payments', auth, requireRole('admin', 'cajero'), async (req, res) => {
+router.post('/:id/payments', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { amount, method, note } = req.body;
   var registradoPor = { name: req.user.name, role: req.user.role };
 
