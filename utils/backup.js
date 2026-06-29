@@ -144,4 +144,19 @@ async function getBackupDownloadUrl(storagePath) {
   return res.data.signedUrl;
 }
 
-module.exports = { createTenantBackup, getBackupDownloadUrl };
+/**
+ * Descarga y parsea el contenido JSON de un backup desde Storage.
+ * @param {string} storagePath — path dentro del bucket 'backups'
+ * @returns {Promise<Object>} — payload { version, tenant_id, created_at, tables }
+ */
+async function getBackupData(storagePath) {
+  var res = await supabase.storage.from('backups').download(storagePath);
+  if (res.error) {
+    logger.error({ err: res.error, path: storagePath }, '[BACKUP] Error descargando archivo');
+    throw res.error;
+  }
+  var text = await res.data.text();
+  return JSON.parse(text);
+}
+
+module.exports = { createTenantBackup, getBackupDownloadUrl, getBackupData };
