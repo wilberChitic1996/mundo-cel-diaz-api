@@ -13,7 +13,8 @@ const cache    = require('../utils/cache');
 const logger   = require('../utils/logger');
 
 const TTL_SECONDS       = 300;  // 5 minutos de caché
-const LOOKUP_TIMEOUT_MS = 1500; // tope para la consulta de suscripción
+// Tope para la consulta de suscripción (configurable; default prod 1500ms).
+const LOOKUP_TIMEOUT_MS = Number(process.env.DB_LOOKUP_TIMEOUT_MS) || 1500;
 
 // Decisión pura y testeable: ¿debe bloquearse según el estado del tenant?
 function isSubscriptionBlocked(sub) {

@@ -6,6 +6,7 @@ const crypto    = require('crypto');
 const bcrypt    = require('bcryptjs');
 const supabase  = require('../supabase');
 const logAudit  = require('../utils/audit');
+const cache     = require('../utils/cache');
 const { withTenant, tid } = require('../utils/tenant');
 
 // Roles que un admin de tenant puede asignar. NUNCA 'superadmin': ese rol rompe el
@@ -102,6 +103,10 @@ router.put('/:id', auth, async (req, res) => {
     req
   ).select('id,name,email,role,active,sec_question').single();
   if (error) { logger.error({ err: error }, '[USERS]'); return res.status(500).json({ error: 'Error interno' }); }
+
+  // Revocación de sesión inmediata: invalidar el estado cacheado del usuario para que
+  // un cambio de `active`/`role` se refleje en el próximo request (ver middleware/auth.js).
+  await cache.del('usr:' + req.params.id);
 
   var CAMPOS_U = { name:'Nombre', email:'Email', role:'Rol', active:'Activo' };
   var diff = {};
