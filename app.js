@@ -41,19 +41,27 @@ app.use(helmet({
   xPermittedCrossDomainPolicies: { permittedPolicies: 'none' },
 }));
 
-var allowedOrigins = process.env.FRONTEND_URL
+// Dominios de producción SIEMPRE permitidos (apex + www), aunque la env var
+// FRONTEND_URL quede mal configurada. Evita caídas de login por CORS.
+var STATIC_ALLOWED = [
+  'https://mundoceldiaz.com',
+  'https://www.mundoceldiaz.com',
+];
+var allowedOrigins = (process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(function(u) { return u.trim(); })
-  : [];
+  : []).concat(STATIC_ALLOWED);
 app.use(cors({
   origin: function(origin, cb) {
     // Permitir requests sin origen (Postman, curl, server-to-server)
     if (!origin) return cb(null, true);
-    // Orígenes explícitos desde FRONTEND_URL env var
-    if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) return cb(null, true);
+    // Orígenes explícitos: FRONTEND_URL env var + dominios de producción fijos
+    if (allowedOrigins.includes(origin)) return cb(null, true);
     // C5: solo los despliegues de NUESTRO proyecto en Vercel (staging + PR previews
     // del proyecto mundo-cel-diaz), no cualquier *.vercel.app de terceros.
     if (/^https:\/\/mundo-cel-diaz[a-z0-9-]*\.vercel\.app$/i.test(origin)) return cb(null, true);
-    cb(new Error('CORS no permitido: ' + origin));
+    // Origen no permitido: rechazar LIMPIO (sin cabeceras CORS) en vez de lanzar
+    // un error 500. El navegador bloquea igual, pero no ensucia con errores del servidor.
+    return cb(null, false);
   },
   credentials: true
 }));
