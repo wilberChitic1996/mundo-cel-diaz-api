@@ -101,6 +101,7 @@ var routes = {
   push:       require('./routes/push'),
   backup:     require('./routes/backup'),
   serials:    require('./routes/serials'),
+  migration:  require('./routes/migration'),
 };
 
 Object.keys(routes).forEach(function(name) {
