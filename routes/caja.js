@@ -106,8 +106,18 @@ router.post('/cerrar/:id', auth, requireRole('admin', 'cajero'), enforceSubscrip
   );
   var total_gastos = (gastos || []).reduce(function(s, g) { return s + Number(g.monto || 0); }, 0);
 
+  // Reembolsos en EFECTIVO del período (devoluciones) — salen de la gaveta,
+  // por lo que deben restarse del efectivo esperado (antes acusaban faltante falso).
+  var { data: devsCierre } = await withTenant(
+    supabase.from('returns').select('refund_amount,refund_method,created_at')
+      .gte('created_at', desde).lte('created_at', hasta), req
+  );
+  var efectivo_reembolsos = (devsCierre || []).reduce(function(s, r) {
+    return s + (r.refund_method === 'Efectivo' ? Number(r.refund_amount || 0) : 0);
+  }, 0);
+
   // Efectivo esperado en caja y diferencia contra lo contado.
-  var total_efectivo = fondo + efectivo_ventas + efectivo_abonos - total_gastos;
+  var total_efectivo = fondo + efectivo_ventas + efectivo_abonos - total_gastos - efectivo_reembolsos;
   var contado = (efectivo_contado !== undefined && efectivo_contado !== null) ? Number(efectivo_contado) : null;
   var diferencia = contado !== null ? (contado - total_efectivo) : null;
 
@@ -146,6 +156,17 @@ router.get('/gastos', auth, async (req, res) => {
 router.post('/gastos', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { sesion_id, concepto, monto, categoria } = req.body;
   if (!concepto || !monto) return res.status(400).json({ error: 'concepto y monto requeridos' });
+  if (!(Number(monto) > 0)) return res.status(400).json({ error: 'El monto del gasto debe ser mayor a 0' });
+
+  // El gasto debe pertenecer a una sesión de caja ABIERTA de este tenant.
+  // (Antes se aceptaba cualquier sesion_id, incluso de sesiones cerradas cuyo
+  // arqueo persistido ya no se recalcula.)
+  if (sesion_id) {
+    var { data: sesG } = await withTenant(
+      supabase.from('caja_sesiones').select('id').eq('id', sesion_id).is('closed_at', null), req
+    ).maybeSingle();
+    if (!sesG) return res.status(400).json({ error: 'Sesión de caja no encontrada o ya cerrada' });
+  }
 
   var { data, error } = await supabase
     .from('caja_gastos')
@@ -158,6 +179,17 @@ router.post('/gastos', auth, requireRole('admin', 'cajero'), enforceSubscription
 // DELETE /api/caja/gastos/:id
 router.delete('/gastos/:id', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+  // No borrar gastos de sesiones ya cerradas: su arqueo persistido quedaría inconsistente.
+  var { data: gRow } = await withTenant(
+    supabase.from('caja_gastos').select('id,sesion_id').eq('id', req.params.id), req
+  ).maybeSingle();
+  if (!gRow) return res.status(404).json({ error: 'Gasto no encontrado' });
+  if (gRow.sesion_id) {
+    var { data: sesDel } = await withTenant(
+      supabase.from('caja_sesiones').select('id,closed_at').eq('id', gRow.sesion_id), req
+    ).maybeSingle();
+    if (sesDel && sesDel.closed_at) return res.status(400).json({ error: 'No se puede eliminar un gasto de una sesión ya cerrada' });
+  }
   var { error } = await withTenant(supabase.from('caja_gastos').delete().eq('id', req.params.id), req);
   if (error) return res.status(500).json({ error: 'Error interno' });
   res.json({ ok: true });
