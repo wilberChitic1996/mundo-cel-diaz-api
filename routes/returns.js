@@ -5,6 +5,7 @@ const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const logAudit = require('../utils/audit');
 const { withTenant, tid } = require('../utils/tenant');
+const { validateRefund } = require('../utils/validate');
 const requireRole = require('../middleware/requireRole');
 const enforceSubscription = require('../middleware/enforceSubscription');
 const cache    = require('../utils/cache');
@@ -37,19 +38,42 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
   const total = (items||[]).reduce(function(s,i){return s+i.price*i.qty;},0);
   const tenantId = tid(req);
 
-  // B5: si la devolución referencia una venta, validar que no exceda lo vendido.
+  // Blindaje de dinero: monto de reembolso numérico, >= 0 y <= valor de los ítems devueltos.
+  var vRef = validateRefund({ refundAmount: refundAmount, itemsTotal: total });
+  if (!vRef.ok) return res.status(400).json({ error: vRef.error });
+
+  // B5 + anti-doble-devolución: si referencia una venta, validar contra lo vendido
+  // DESCONTANDO las devoluciones anteriores de esa misma venta (dinero y cantidades).
   if (saleId) {
     var { data: origSale } = await withTenant(supabase.from('sales').select('id,total').eq('id', saleId), req).maybeSingle();
     if (!origSale) return res.status(404).json({ error: 'Venta original no encontrada' });
-    if (Number(refundAmount||0) > Number(origSale.total) + 0.01) {
-      return res.status(400).json({ error: 'El reembolso (' + (refundAmount||0) + ') no puede exceder el total de la venta (' + origSale.total + ')' });
-    }
+
+    // Devoluciones previas de esta venta
+    var { data: prevRets } = await withTenant(
+      supabase.from('returns').select('id,refund_amount').eq('sale_id', saleId), req
+    );
+    var prevRefunded = (prevRets||[]).reduce(function(s2,r){ return s2 + Number(r.refund_amount||0); }, 0);
+    var vRef2 = validateRefund({ refundAmount: refundAmount, saleTotal: origSale.total, prevRefunded: prevRefunded });
+    if (!vRef2.ok) return res.status(400).json({ error: vRef2.error });
+
     var { data: soldItems } = await withTenant(supabase.from('sale_items').select('code,qty').eq('sale_id', saleId), req);
     var soldByCode = {};
     (soldItems||[]).forEach(function(si){ soldByCode[si.code] = (soldByCode[si.code]||0) + Number(si.qty); });
+
+    // Restar cantidades ya devueltas en devoluciones previas
+    var prevIds = (prevRets||[]).map(function(r){ return r.id; });
+    if (prevIds.length) {
+      var { data: prevItems } = await withTenant(
+        supabase.from('return_items').select('code,qty').in('return_id', prevIds), req
+      );
+      (prevItems||[]).forEach(function(pi){
+        if (pi.code && soldByCode[pi.code] !== undefined) soldByCode[pi.code] -= Number(pi.qty);
+      });
+    }
+
     for (var ri of (items||[])) {
       if (ri.code && soldByCode[ri.code] !== undefined && Number(ri.qty) > soldByCode[ri.code] + 0.01) {
-        return res.status(400).json({ error: 'No se puede devolver más de lo vendido de "' + (ri.name||ri.code) + '"' });
+        return res.status(400).json({ error: 'No se puede devolver más de lo vendido (contando devoluciones anteriores) de "' + (ri.name||ri.code) + '"' });
       }
     }
   }
