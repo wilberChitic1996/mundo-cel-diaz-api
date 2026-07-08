@@ -55,6 +55,22 @@ router.post('/debts', auth, requireRole('admin'), enforceSubscription, async (re
   var registradoPor = { name: req.user.name, role: req.user.role };
 
   // 1) Validar y normalizar TODO antes de insertar nada (mensajes por fila, en lenguaje de tienda).
+  // Enlace con la ficha del cliente: si el nombre ya existe (ignorando mayúsculas y
+  // espacios extra) se ENLAZA (client_id); si no existe, se CREA el cliente para que
+  // la deuda aparezca en su perfil y sirvan los recordatorios. Al deshacer una carga
+  // NO se borran los clientes creados (son personas reales, no estorban).
+  function normName(n) { return String(n || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+  var { data: cliList, error: cliErr } = await supabase.from('clients')
+    .select('id, name, cli_code').eq('tenant_id', tenantId);
+  if (cliErr) { logger.error({ err: cliErr }, '[MIGRATION] clients lookup'); return res.status(500).json({ error: 'Error interno al leer clientes' }); }
+  var cliByName = {};
+  var maxCli = 0;
+  (cliList || []).forEach(function(c) {
+    cliByName[normName(c.name)] = c;
+    var m = String(c.cli_code || '').match(/CLI-(\d+)/);
+    if (m) maxCli = Math.max(maxCli, parseInt(m[1], 10));
+  });
+
   var rows = [];
   for (var i = 0; i < debts.length; i++) {
     var d = debts[i] || {};
@@ -84,6 +100,7 @@ router.post('/debts', auth, requireRole('admin'), enforceSubscription, async (re
     rows.push({
       items: Array.isArray(d.items) ? d.items : null,
       note: (d.note == null ? '' : String(d.note)).trim() || null,
+      phone: (d.phone == null ? '' : String(d.phone)).trim() || null,
       account: {
         client: client, total: total, paid: paid, balance: balance, status: status,
         method: 'Efectivo', sale_id: null, user_id: req.user.userId, registrado_por: registradoPor,
@@ -91,6 +108,30 @@ router.post('/debts', auth, requireRole('admin'), enforceSubscription, async (re
         created_at: createdAt,
       },
     });
+  }
+
+  // 1.b) Resolver el cliente de cada fila: enlazar al existente o crearlo.
+  var clientesCreados = 0;
+  for (var k = 0; k < rows.length; k++) {
+    var rk = rows[k];
+    var key = normName(rk.account.client);
+    var existing = cliByName[key];
+    if (existing) {
+      rk.account.client_id = existing.id;
+      rk.account.client = existing.name; // nombre canónico de la ficha
+    } else {
+      maxCli += 1;
+      var nuevo = {
+        id: crypto.randomUUID(), cli_code: 'CLI-' + String(maxCli).padStart(3, '0'),
+        name: rk.account.client, phone: rk.phone, nit: 'CF', active: true,
+        created_at: new Date().toISOString(), tenant_id: tenantId,
+      };
+      var { data: cliNew, error: cErr } = await supabase.from('clients').insert(nuevo).select('id, name, cli_code').single();
+      if (cErr) { logger.error({ err: cErr }, '[MIGRATION] client create'); return res.status(500).json({ error: 'Error al crear el cliente ' + rk.account.client + '. No se cargó nada.' }); }
+      cliByName[key] = cliNew;
+      rk.account.client_id = cliNew.id;
+      clientesCreados += 1;
+    }
   }
 
   // 2) Insertar secuencialmente (cuenta + su detalle) para correlacionar bien el id.
@@ -127,9 +168,9 @@ router.post('/debts', auth, requireRole('admin'), enforceSubscription, async (re
 
   var totalDebt = rows.reduce(function(s, r) { return s + Number(r.account.balance); }, 0);
   await logAudit(req.user, 'migracion_historica', 'migracion', batchId, {
-    tipo: 'deudas', conteo: insertedIds.length, total_deuda: totalDebt,
+    tipo: 'deudas', conteo: insertedIds.length, total_deuda: totalDebt, clientes_creados: clientesCreados,
   });
-  res.status(201).json({ batchId: batchId, created: insertedIds.length, totalDebt: totalDebt });
+  res.status(201).json({ batchId: batchId, created: insertedIds.length, totalDebt: totalDebt, clientsCreated: clientesCreados });
 });
 
 // GET /api/migration/batches — lotes de migración del tenant (para revisar / deshacer).
