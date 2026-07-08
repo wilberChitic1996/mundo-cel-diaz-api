@@ -8,6 +8,7 @@ const { withTenant, tid } = require('../utils/tenant');
 const requireRole = require('../middleware/requireRole');
 const enforceSubscription = require('../middleware/enforceSubscription');
 const { parsePaging } = require('../utils/paging');
+const { validatePaymentAmount } = require('../utils/validate');
 
 /**
  * @openapi
@@ -69,8 +70,12 @@ router.post('/:id/payments', auth, requireRole('admin', 'cajero'), enforceSubscr
   var registradoPor = { name: req.user.name, role: req.user.role };
 
   // Verificar que la cuenta pertenece al tenant del usuario antes de registrar el pago
-  var { data: acc, error: accErr } = await withTenant(supabase.from('accounts').select('id,total').eq('id', req.params.id), req).single();
+  var { data: acc, error: accErr } = await withTenant(supabase.from('accounts').select('id,total,balance').eq('id', req.params.id), req).single();
   if (accErr || !acc) return res.status(404).json({ error: 'Cuenta no encontrada' });
+
+  // Blindaje de dinero: rechazar abonos negativos, cero o mayores al saldo pendiente.
+  var vPmt = validatePaymentAmount(amount, acc.balance);
+  if (!vPmt.ok) return res.status(400).json({ error: vPmt.error });
 
   // Idempotencia (B2): evita duplicar el abono por doble-click o reintento de red.
   // Si llega de nuevo la misma clave, se devuelve el abono ya registrado sin recalcular el saldo.

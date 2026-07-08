@@ -10,6 +10,7 @@ const enforceSubscription = require('../middleware/enforceSubscription');
 const felService = require('../services/felService');
 const { parsePaging } = require('../utils/paging');
 const cache     = require('../utils/cache');
+const { validateSaleInput } = require('../utils/validate');
 
 /**
  * @openapi
@@ -38,17 +39,34 @@ router.get('/', auth, async (req, res) => {
 router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
   var { client, total, method, items, payType, initialPay, idempotencyKey, nota, ivaPct, secondMethod, secondAmount, repairId } = req.body;
 
-  // Marca una reparación como entregada (cobrada) — evita cobros duplicados
+  // Marca una reparación como entregada (cobrada) — evita cobros duplicados.
+  // Update CONDICIONAL: solo si aún no está 'entregado' (protege contra carreras).
   async function marcarReparacionEntregada() {
     if (!repairId) return;
     var { error: repErr } = await withTenant(
-      supabase.from('repairs').update({ status: 'entregado', updated_at: new Date() }).eq('id', repairId),
+      supabase.from('repairs').update({ status: 'entregado', updated_at: new Date() })
+        .eq('id', repairId).neq('status', 'entregado'),
       req
     );
     if (repErr) logger.error({ err: repErr }, '[SALES] marcar reparación entregada');
   }
   if (!client || !items || !items.length)
     return res.status(400).json({ error: 'Datos incompletos' });
+
+  // Blindaje de dinero: el servidor NO confía en los montos del cliente.
+  // Valida qty > 0, price >= 0, total == Σ(price*qty), pago dividido y abono inicial.
+  var vIn = validateSaleInput({ total, items, secondMethod, secondAmount, payType, initialPay });
+  if (!vIn.ok) return res.status(400).json({ error: vIn.error });
+
+  // Anti-doble-cobro de reparaciones: verificar el estado ANTES de crear la venta.
+  if (repairId) {
+    var { data: repRow } = await withTenant(
+      supabase.from('repairs').select('id,status').eq('id', repairId), req
+    ).maybeSingle();
+    if (!repRow) return res.status(404).json({ error: 'Reparación no encontrada' });
+    if (repRow.status === 'entregado')
+      return res.status(409).json({ error: 'Esta reparación ya fue cobrada y entregada. No se puede cobrar dos veces.' });
+  }
 
   // Brecha #4: calcular IVA incluido (precios ya incluyen IVA)
   var ivaPercent = parseFloat(ivaPct) || 0;
@@ -184,7 +202,8 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     return res.status(201).json(sale);
 
   } else {
-    var paid    = payType === 'parcial' ? Math.min(parseFloat(initialPay)||0, total) : 0;
+    // Piso en 0: un abono inicial negativo generaría deuda mayor que la venta
+    var paid    = payType === 'parcial' ? Math.max(0, Math.min(parseFloat(initialPay)||0, total)) : 0;
     var balance = total - paid;
     var status  = balance <= 0 ? 'pagado' : paid > 0 ? 'parcial' : 'pendiente';
 
