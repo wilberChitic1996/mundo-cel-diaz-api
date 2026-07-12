@@ -31,7 +31,7 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/returns
 router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
-  const { client, saleId, reason, refundMethod, refundAmount, itemCondition, items } = req.body;
+  const { client, clientId, saleId, reason, refundMethod, refundAmount, itemCondition, items } = req.body;
   if (!['bueno', 'defectuoso'].includes(itemCondition)) {
     return res.status(400).json({ error: 'itemCondition debe ser "bueno" o "defectuoso"' });
   }
@@ -114,7 +114,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
 
   const { data: ret, error } = await supabase
     .from('returns')
-    .insert({ client, sale_id: saleId||null, reason,
+    .insert({ client, client_id: clientId||null, sale_id: saleId||null, reason,
       refund_method: refundMethod,
       refund_amount: refundAmount||0,
       item_condition: itemCondition||'bueno',
@@ -126,7 +126,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
 
   if (items && items.length) {
     await supabase.from('return_items').insert(
-      items.map(function(i){ return { return_id:ret.id, code:i.code, name:i.name, price:i.price, qty:i.qty, tenant_id: tenantId }; })
+      items.map(function(i){ return { return_id:ret.id, code:i.code, name:i.name, price:i.price, qty:i.qty, variant_id:i.variant_id||null, serial_id:i.serial_id||null, tenant_id: tenantId }; })
     );
   }
 
@@ -149,9 +149,34 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
         user_name: req.user.name, user_role: req.user.role,
       });
     }
+    // Variante: reingresar tambien el contador de esa variante (informativo, piso arriba sin tope).
+    for (var itv of items) {
+      if (!itv.variant_id) continue;
+      try {
+        var { data: vRow } = await supabase.from('product_variants')
+          .select('id,stock').eq('id', itv.variant_id).eq('tenant_id', tenantId).maybeSingle();
+        if (vRow) await supabase.from('product_variants')
+          .update({ stock: Number(vRow.stock||0) + Number(itv.qty), updated_at: new Date().toISOString() })
+          .eq('id', itv.variant_id).eq('tenant_id', tenantId);
+      } catch (eV) { logger.error({ err: eV }, '[RETURNS] variante no reingresada'); }
+    }
+    // Serial/IMEI: liberar el equipo devuelto en buen estado (vuelve a estar disponible).
+    for (var its of items) {
+      if (!its.serial_id) continue;
+      await supabase.from('product_serials')
+        .update({ status: 'disponible', sale_id: null, updated_at: new Date().toISOString() })
+        .eq('id', its.serial_id).eq('tenant_id', tenantId).eq('status', 'vendido');
+    }
     // C3: el reingreso cambió stock → invalidar la caché de la lista de productos.
     await cache.del('products:' + tenantId);
   } else {
+    // Serial/IMEI devuelto DEFECTUOSO: marcarlo defectuoso (no vuelve a estar disponible).
+    for (var itd of items) {
+      if (!itd.serial_id) continue;
+      await supabase.from('product_serials')
+        .update({ status: 'defectuoso', updated_at: new Date().toISOString() })
+        .eq('id', itd.serial_id).eq('tenant_id', tenantId).eq('status', 'vendido');
+    }
     var defItems = items.map(function(i){ return { return_id:ret.id, code:i.code, name:i.name, qty:i.qty, price:i.price, reason:reason, status:'defectuoso', tenant_id: tenantId }; });
     await supabase.from('defectives').insert(defItems);
   }

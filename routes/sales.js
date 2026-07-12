@@ -37,7 +37,7 @@ router.get('/', auth, async (req, res) => {
 
 // POST /api/sales
 router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
-  var { client, total, method, items, payType, initialPay, idempotencyKey, nota, ivaPct, secondMethod, secondAmount, repairId } = req.body;
+  var { client, clientId, total, method, items, payType, initialPay, idempotencyKey, nota, ivaPct, secondMethod, secondAmount, repairId } = req.body;
 
   // Marca una reparación como entregada (cobrada) — evita cobros duplicados.
   // Update CONDICIONAL: solo si aún no está 'entregado' (protege contra carreras).
@@ -153,7 +153,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
   }
 
   if (payType === 'completo') {
-    var insertData = { client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId, iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto, second_method: secondMethod||null, second_amount: secondAmount ? parseFloat(secondAmount) : null };
+    var insertData = { client, client_id: clientId||null, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId, iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto, second_method: secondMethod||null, second_amount: secondAmount ? parseFloat(secondAmount) : null };
     if (idempotencyKey) insertData.idempotency_key = idempotencyKey;
     if (nota) insertData.nota = nota;
 
@@ -161,7 +161,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     if (sErr) { logger.error({ err: sErr }, '[SALES]'); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: siErr } = await supabase.from('sale_items').insert(
-      items.map(function(i){ return { sale_id:sale.id, product_id:(i.unit==='serv'?null:(i.id||null)), code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
+      items.map(function(i){ return { sale_id:sale.id, product_id:(i.unit==='serv'?null:(i.id||null)), code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, variant_id:i.variant_id||null, serial_id:i.serial_id||null, tenant_id:tenantId }; })
     );
     if (siErr) {
       logger.error('[SALES] sale_items insert failed for sale');
@@ -228,7 +228,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
 
     // Crear el registro en sales para que aparezca en reportes y respaldo
     var saleInsert2 = {
-      client, total, method: method||'Efectivo', status: 'cuenta',
+      client, client_id: clientId||null, total, method: method||'Efectivo', status: 'cuenta',
       pay_type: payType === 'parcial' ? 'parcial' : 'credito',
       user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId,
       iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto,
@@ -239,7 +239,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     if (csErr) { logger.error({ err: csErr }, '[SALES credit]'); return res.status(500).json({ error: 'Error interno' }); }
 
     var { error: csiErr } = await supabase.from('sale_items').insert(
-      items.map(function(i){ return { sale_id:creditSale.id, product_id:(i.unit==='serv'?null:(i.id||null)), code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, tenant_id:tenantId }; })
+      items.map(function(i){ return { sale_id:creditSale.id, product_id:(i.unit==='serv'?null:(i.id||null)), code:i.code, name:i.name, price:i.price, qty:i.qty, subtotal:i.price*i.qty, variant_id:i.variant_id||null, serial_id:i.serial_id||null, tenant_id:tenantId }; })
     );
     if (csiErr) {
       logger.error('[SALES] sale_items (credit) insert failed for sale');
