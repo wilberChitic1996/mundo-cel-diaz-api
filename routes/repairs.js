@@ -64,7 +64,7 @@ router.put('/:id/status', auth, requireRole('admin', 'cajero'), enforceSubscript
   var { status } = req.body;
   var { data: before } = await withTenant(supabase.from('repairs').select('status,rep_code,client_name,brand,model').eq('id', req.params.id), req).single();
   var { data, error } = await withTenant(
-    supabase.from('repairs').update({ status, updated_at: new Date() }).eq('id', req.params.id),
+    supabase.from('repairs').update({ status: status, updated_at: new Date() }).eq('id', req.params.id),
     req
   ).select().single();
   if (error) { logger.error({ err: error }, '[REPAIRS]'); return res.status(500).json({ error: 'Error interno' }); }
@@ -80,19 +80,30 @@ router.put('/:id', auth, requireRole('admin', 'cajero'), enforceSubscription, as
   var b = req.body;
   var { data: before } = await withTenant(supabase.from('repairs').select('*').eq('id', req.params.id), req).single();
   var { data, error } = await withTenant(
-    supabase.from('repairs').update({
-      client_id: b.clientId||null, client_name: b.clientName,
-      client_phone: b.clientPhone||null, client_cli: b.clientCli||null,
-      brand: b.brand, model: b.model, imei: b.imei||null,
-      problem_desc: b.problemDesc, diagnosis: b.diagnosis||null,
-      tech_name: b.techName||null, estimated_cost: b.estimatedCost||0,
-      promised_date: b.promisedDate||null, internal_note: b.internalNote||null,
-      status: b.status, parts: b.parts||[],
-      reception_checklist: b.receptionChecklist !== undefined ? b.receptionChecklist : undefined,
-      delivery_photos: b.deliveryPhotos !== undefined ? b.deliveryPhotos : undefined,
-      final_cost: b.finalCost !== undefined ? (parseFloat(b.finalCost)||0) : undefined,
-      updated_at: new Date()
-    }).eq('id', req.params.id),
+    // Update PARCIAL: solo los campos que el cliente envio. Antes un payload parcial
+    // (ej. solo { finalCost }) borraba tecnico/IMEI/diagnostico/repuestos con ||null/||0.
+    supabase.from('repairs').update((function() {
+      var u = { updated_at: new Date() };
+      if (b.clientId !== undefined)           u.client_id = b.clientId || null;
+      if (b.clientName !== undefined)         u.client_name = b.clientName;
+      if (b.clientPhone !== undefined)        u.client_phone = b.clientPhone || null;
+      if (b.clientCli !== undefined)          u.client_cli = b.clientCli || null;
+      if (b.brand !== undefined)              u.brand = b.brand;
+      if (b.model !== undefined)              u.model = b.model;
+      if (b.imei !== undefined)               u.imei = b.imei || null;
+      if (b.problemDesc !== undefined)        u.problem_desc = b.problemDesc;
+      if (b.diagnosis !== undefined)          u.diagnosis = b.diagnosis || null;
+      if (b.techName !== undefined)           u.tech_name = b.techName || null;
+      if (b.estimatedCost !== undefined)      u.estimated_cost = b.estimatedCost || 0;
+      if (b.promisedDate !== undefined)       u.promised_date = b.promisedDate || null;
+      if (b.internalNote !== undefined)       u.internal_note = b.internalNote || null;
+      if (b.status !== undefined)             u.status = b.status;
+      if (b.parts !== undefined)              u.parts = b.parts || [];
+      if (b.receptionChecklist !== undefined) u.reception_checklist = b.receptionChecklist;
+      if (b.deliveryPhotos !== undefined)     u.delivery_photos = b.deliveryPhotos;
+      if (b.finalCost !== undefined)          u.final_cost = parseFloat(b.finalCost) || 0;
+      return u;
+    })()).eq('id', req.params.id),
     req
   ).select().single();
   if (error) { logger.error({ err: error }, '[REPAIRS]'); return res.status(500).json({ error: 'Error interno' }); }

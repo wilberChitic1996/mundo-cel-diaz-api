@@ -56,6 +56,21 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     var vRef2 = validateRefund({ refundAmount: refundAmount, saleTotal: origSale.total, prevRefunded: prevRefunded });
     if (!vRef2.ok) return res.status(400).json({ error: vRef2.error });
 
+    // Venta a CREDITO: si el reembolso SALE de caja (Efectivo/Tarjeta), no puede superar
+    // lo realmente COBRADO de esa venta (abonos), no lo vendido. Lo no cobrado se
+    // resuelve con 'Credito en cuenta' (reduce la deuda, no saca dinero).
+    if (refundMethod === 'Efectivo' || refundMethod === 'Tarjeta') {
+      var { data: accOfSale } = await withTenant(
+        supabase.from('accounts').select('paid').eq('sale_id', saleId), req
+      ).maybeSingle();
+      if (accOfSale) {
+        var cobrado = Number(accOfSale.paid) || 0;
+        if (Number(refundAmount) > cobrado - prevRefunded + 0.01) {
+          return res.status(400).json({ error: 'De esta venta a credito solo se han cobrado Q' + (cobrado - prevRefunded).toFixed(2) + '. No se puede devolver mas que eso en ' + refundMethod + ' - usa "Credito en cuenta" para reducir la deuda.' });
+        }
+      }
+    }
+
     var { data: soldItems } = await withTenant(supabase.from('sale_items').select('code,qty').eq('sale_id', saleId), req);
     var soldByCode = {};
     (soldItems||[]).forEach(function(si){ soldByCode[si.code] = (soldByCode[si.code]||0) + Number(si.qty); });

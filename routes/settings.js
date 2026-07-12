@@ -1,6 +1,8 @@
 const logger = require('../utils/logger');
 const express  = require('express');
 const router   = express.Router();
+const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
 const auth     = require('../middleware/auth');
 const supabase = require('../supabase');
 const { withTenant, tid } = require('../utils/tenant');
@@ -33,7 +35,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // PUT /api/settings
-router.put('/', auth, async (req, res) => {
+router.put('/', auth, requireRole('admin'), enforceSubscription, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
   var updates = req.body;
   if (!updates || typeof updates !== 'object') return res.status(400).json({ error: 'Datos inválidos' });
