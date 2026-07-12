@@ -27,7 +27,7 @@ router.get('/summary', auth, async (req, res) => {
     var [acctRes, warrRes, repairRes] = await Promise.all([
       // Cuentas con saldo pendiente (aging por antigüedad desde created_at)
       withTenant(
-        supabase.from('accounts').select('id, client, balance, created_at').gt('balance', 0),
+        supabase.from('accounts').select('id, client, balance, created_at').gt('balance', 0).lt('created_at', cutoff30),
         req
       ),
       // Garantías por vencer en 7 días
