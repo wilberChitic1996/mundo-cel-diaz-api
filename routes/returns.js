@@ -99,7 +99,9 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
       refund_method: refundMethod,
       refund_amount: refundAmount||0,
       item_condition: itemCondition||'bueno',
-      total, user_id: req.user.userId, tenant_id: tenantId })
+      total, user_id: req.user.userId,
+      registrado_por: { name: req.user.name, role: req.user.role },
+      tenant_id: tenantId })
     .select().single();
   if (error) { logger.error({ err: error }, '[RETURNS]'); return res.status(500).json({ error: 'Error interno' }); }
 
