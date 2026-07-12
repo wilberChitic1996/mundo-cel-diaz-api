@@ -93,13 +93,34 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     }
   }
 
+  // 'Credito en cuenta': reducir la DEUDA real de la cuenta ligada a la venta.
+  // Se descuenta del principal (total y balance bajan por igual; paid no cambia)
+  // para no fabricar un 'abono' que Cuadres contaria como ingreso.
+  if (saleId && refundMethod === 'Crédito en cuenta' && Number(refundAmount) > 0) {
+    var { data: accCredit } = await withTenant(
+      supabase.from('accounts').select('id,total,paid,balance').eq('sale_id', saleId), req
+    ).maybeSingle();
+    if (accCredit) {
+      var ncMonto   = Math.min(Number(refundAmount), Number(accCredit.balance));
+      var ncTotal   = Math.max(0, Number(accCredit.total) - ncMonto);
+      var ncBalance = Math.max(0, Number(accCredit.balance) - ncMonto);
+      var ncStatus  = ncBalance <= 0 ? 'pagado' : Number(accCredit.paid) > 0 ? 'parcial' : 'pendiente';
+      await withTenant(
+        supabase.from('accounts').update({ total: ncTotal, balance: ncBalance, status: ncStatus, updated_at: new Date() }).eq('id', accCredit.id),
+        req
+      );
+    }
+  }
+
   const { data: ret, error } = await supabase
     .from('returns')
     .insert({ client, sale_id: saleId||null, reason,
       refund_method: refundMethod,
       refund_amount: refundAmount||0,
       item_condition: itemCondition||'bueno',
-      total, user_id: req.user.userId, tenant_id: tenantId })
+      total, user_id: req.user.userId,
+      registrado_por: { name: req.user.name, role: req.user.role },
+      tenant_id: tenantId })
     .select().single();
   if (error) { logger.error({ err: error }, '[RETURNS]'); return res.status(500).json({ error: 'Error interno' }); }
 
