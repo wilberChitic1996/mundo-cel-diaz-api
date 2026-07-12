@@ -134,6 +134,24 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     }
   }
 
+  // Stock POR VARIANTE: si la línea trae variant_id (elegida en el POS), descontar
+  // también el contador de esa variante. Es informativo (la verdad del inventario
+  // sigue siendo products.stock, que ya se descuenta atómico) — por eso un fallo
+  // aquí NO revierte la venta, solo se registra en el log.
+  async function decrementVariants(itemsList) {
+    for (var iv of itemsList) {
+      if (!iv.variant_id || iv.unit === 'serv') continue;
+      try {
+        var { data: vRow } = await supabase.from('product_variants')
+          .select('id,stock').eq('id', iv.variant_id).eq('tenant_id', tenantId).maybeSingle();
+        if (!vRow) continue;
+        await supabase.from('product_variants')
+          .update({ stock: Math.max(0, Number(vRow.stock || 0) - Number(iv.qty)), updated_at: new Date().toISOString() })
+          .eq('id', iv.variant_id).eq('tenant_id', tenantId);
+      } catch (eVar) { logger.error({ err: eVar }, '[SALES] stock de variante no descontado'); }
+    }
+  }
+
   if (payType === 'completo') {
     var insertData = { client, total, method: method||'Efectivo', status:'completado', user_id: req.user.userId, registrado_por: registradoPor, tenant_id: tenantId, iva_percent: ivaPercent, iva_amount: ivaAmount, subtotal_neto: subtotalNeto, second_method: secondMethod||null, second_amount: secondAmount ? parseFloat(secondAmount) : null };
     if (idempotencyKey) insertData.idempotency_key = idempotencyKey;
@@ -186,6 +204,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     }
 
     await linkSerials(sale.id, items);
+    await decrementVariants(items);
     // C3: el stock cambió por la venta → invalidar la caché de la lista de productos.
     await cache.del('products:' + tenantId);
 
@@ -291,6 +310,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     }
 
     await linkSerials(creditSale.id, items);
+    await decrementVariants(items);
     // C3: el stock cambió por la venta a crédito → invalidar la caché de productos.
     await cache.del('products:' + tenantId);
 
