@@ -98,9 +98,11 @@ router.post('/:id/payments', auth, requireRole('admin', 'cajero'), enforceSubscr
     .select().single();
   if (pErr) { logger.error({ err: pErr }, '[ACCOUNTS]'); return res.status(500).json({ error: 'Error interno' }); }
 
-  var { data: pmts } = await supabase.from('account_payments').select('amount').eq('account_id', req.params.id);
-  var totalPaid  = (pmts||[]).reduce(function(s,p){return s+Number(p.amount);},0);
-  var newBalance = Math.max(0, Number(acc.total) - totalPaid);
+  // Saldo AUTORITATIVO: restar el abono del balance actual de la cuenta.
+  // (Re-derivar desde account_payments borraba el pago inicial de las deudas
+  //  migradas del cuaderno, que no tienen filas de pago -> saldo inflado.)
+  var newBalance = Math.max(0, Number(acc.balance) - Number(amount));
+  var totalPaid  = Math.max(0, Number(acc.total) - newBalance);
   var newStatus  = newBalance <= 0 ? 'pagado' : totalPaid > 0 ? 'parcial' : 'pendiente';
 
   await withTenant(
