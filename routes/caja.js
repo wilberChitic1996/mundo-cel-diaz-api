@@ -57,7 +57,7 @@ router.post('/abrir', auth, requireRole('admin', 'cajero'), enforceSubscription,
 
 // POST /api/caja/cerrar/:id
 router.post('/cerrar/:id', auth, requireRole('admin', 'cajero'), enforceSubscription, async (req, res) => {
-  var { efectivo_contado, nota } = req.body;
+  var { efectivo_contado, nota, efectivo_desglose } = req.body;
 
   // B3: calcular y persistir el arqueo del período en el servidor (antes quedaba nulo).
   // Traer la sesión abierta para conocer apertura y fondo inicial.
@@ -127,6 +127,7 @@ router.post('/cerrar/:id', auth, requireRole('admin', 'cajero'), enforceSubscrip
       closed_by: req.user.name,
       closed_role: req.user.role,
       efectivo_contado: contado,
+      efectivo_desglose: (efectivo_desglose && typeof efectivo_desglose === 'object') ? efectivo_desglose : null,
       total_ventas: total_ventas,
       total_gastos: total_gastos,
       total_abonos: total_abonos,
