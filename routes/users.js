@@ -1,6 +1,8 @@
 const logger = require('../utils/logger');
 const express   = require('express');
 const router    = express.Router();
+const requireRole = require('../middleware/requireRole');
+const enforceSubscription = require('../middleware/enforceSubscription');
 const auth      = require('../middleware/auth');
 const crypto    = require('crypto');
 const bcrypt    = require('bcryptjs');
@@ -42,7 +44,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/users
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireRole('admin'), enforceSubscription, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
   const { name, email, password, role, secQuestion, secAnswer } = req.body;
 
@@ -72,7 +74,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PUT /api/users/:id
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireRole('admin'), enforceSubscription, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
   const b = req.body || {};
 

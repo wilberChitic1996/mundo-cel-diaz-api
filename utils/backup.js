@@ -17,6 +17,17 @@ var TABLES = [
   'categories',
   'locations',
   'store_settings',
+  // Detalle financiero e inventario (antes faltaban: respaldo incompleto)
+  'account_items',
+  'account_payments',
+  'return_items',
+  'purchases',
+  'purchase_items',
+  'product_serials',
+  'product_variants',
+  'caja_sesiones',
+  'caja_gastos',
+  'stock_movements',
 ];
 
 /**

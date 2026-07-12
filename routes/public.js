@@ -61,7 +61,6 @@ router.get('/verify/:id', async (req, res) => {
     client: record.client || '',
     total: record.total,
     status: record.status || '',
-    balance: (record.balance != null ? record.balance : undefined),
     date: record.created_at,
   });
 });

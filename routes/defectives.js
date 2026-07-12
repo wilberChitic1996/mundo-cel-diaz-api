@@ -33,14 +33,23 @@ router.put('/:id', auth, async (req, res) => {
 
   var { data: def } = await withTenant(supabase.from('defectives').select('*').eq('id', req.params.id), req).single();
 
+  // Anti-doble reingreso: si ya esta 'reingresado', un segundo PUT no vuelve a sumar stock.
+  if (status === 'reingresado' && def && def.status === 'reingresado') {
+    return res.status(409).json({ error: 'Este articulo ya fue reingresado al inventario.' });
+  }
   if (status === 'reingresado' && def && def.code) {
     // B4/B5: reingreso robusto (sin .single()) + atómico + movimiento de inventario.
     var { data: pRows } = await withTenant(supabase.from('products').select('id').eq('code', def.code).limit(1), req);
     var pid = (pRows && pRows.length) ? pRows[0].id : null;
+    if (!pid) {
+      return res.status(409).json({ error: 'No se pudo reingresar: el producto (' + def.code + ') ya no existe en el catalogo.' });
+    }
     if (pid) {
       var { data: newStock, error: incErr } = await supabase.rpc('increment_stock', { p_product_id: pid, p_qty: Number(def.qty), p_tenant_id: tid(req) });
       if (incErr) {
+        // No marcar 'reingresado' si el inventario NO se pudo actualizar (descuadre).
         logger.error({ err: incErr }, '[DEFECTIVES] increment_stock reingreso');
+        return res.status(500).json({ error: 'No se pudo reingresar al inventario. Intenta de nuevo.' });
       } else if (newStock != null) {
         await supabase.from('stock_movements').insert({
           tenant_id: tid(req), product_id: pid, type: 'devolucion',

@@ -183,6 +183,7 @@ router.put('/users/:id/reset-password', auth, superadminOnly, async (req, res) =
   var hash = await bcrypt.hash(newPassword, 10);
   var { error } = await supabase.from('users').update({ password_hash: hash }).eq('id', req.params.id);
   if (error) return res.status(500).json({ error: 'Error interno' });
+  await cache.del('usr:' + req.params.id); // corte inmediato de sesion (revocacion)
   res.json({ ok: true });
 });
 
@@ -195,6 +196,7 @@ router.put('/users/:id/toggle', auth, superadminOnly, async (req, res) => {
   var { data, error } = await supabase
     .from('users').update({ active: !targetUser.active }).eq('id', req.params.id).select('id,name,email,role,active').single();
   if (error) return res.status(500).json({ error: 'Error interno' });
+  await cache.del('usr:' + req.params.id); // corte inmediato de sesion (revocacion)
   res.json(data);
 });
 
@@ -278,6 +280,7 @@ router.delete('/users/:id', auth, superadminOnly, async (req, res) => {
   if (targetUser.role === 'superadmin') return res.status(403).json({ error: 'No se puede eliminar al superadmin' });
   var { error } = await supabase.from('users').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: 'Error eliminando usuario' });
+  await cache.del('usr:' + req.params.id); // corte inmediato de sesion (revocacion)
   res.json({ ok: true });
 });
 

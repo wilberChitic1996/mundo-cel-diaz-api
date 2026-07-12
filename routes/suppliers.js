@@ -127,7 +127,7 @@ router.post('/purchases', auth, requireRole('admin'), enforceSubscription, async
     proveedor: supplierName, articulos: items.length, total: total,
   });
 
-  var { data: full } = await supabase.from('purchases').select('*, purchase_items(*)').eq('id', purchase.id).single();
+  var { data: full } = await supabase.from('purchases').select('*, purchase_items(*)').eq('id', purchase.id).eq('tenant_id', tid(req)).single();
   res.status(201).json(full);
 });
 

@@ -147,7 +147,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     );
     if (siErr) {
       logger.error('[SALES] sale_items insert failed for sale');
-      await supabase.from('sales').delete().eq('id', sale.id);
+      await supabase.from('sales').delete().eq('id', sale.id).eq('tenant_id', tenantId);
       return res.status(500).json({ error: 'Error al guardar ítems de venta' });
     }
 
@@ -171,7 +171,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
         await supabase.rpc('increment_stock', { p_product_id: d.item.id, p_qty: d.item.qty, p_tenant_id: tenantId });
       }
       await supabase.from('sale_items').delete().eq('sale_id', sale.id).eq('tenant_id', tenantId);
-      await supabase.from('sales').delete().eq('id', sale.id).eq('tenant_id', tenantId);
+      await supabase.from('sales').delete().eq('id', sale.id).eq('tenant_id', tenantId).eq('tenant_id', tenantId);
       logger.error({ err: stockErr }, '[SALES] venta revertida por fallo al descontar stock');
       return res.status(409).json({ error: 'No se pudo completar la venta: el stock cambió. Reintentá.' });
     }
@@ -224,7 +224,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     );
     if (csiErr) {
       logger.error('[SALES] sale_items (credit) insert failed for sale');
-      await supabase.from('sales').delete().eq('id', creditSale.id);
+      await supabase.from('sales').delete().eq('id', creditSale.id).eq('tenant_id', tenantId);
       return res.status(500).json({ error: 'Error al guardar ítems de venta' });
     }
 
@@ -243,7 +243,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
       logger.error({ err: aiErr }, '[SALES credit] account_items insert failed');
       await supabase.from('accounts').delete().eq('id', acc.id).eq('tenant_id', tenantId);
       await supabase.from('sale_items').delete().eq('sale_id', creditSale.id).eq('tenant_id', tenantId);
-      await supabase.from('sales').delete().eq('id', creditSale.id).eq('tenant_id', tenantId);
+      await supabase.from('sales').delete().eq('id', creditSale.id).eq('tenant_id', tenantId).eq('tenant_id', tenantId);
       return res.status(500).json({ error: 'Error al guardar ítems de la cuenta' });
     }
 
@@ -276,7 +276,7 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
       await supabase.from('account_items').delete().eq('account_id', acc.id).eq('tenant_id', tenantId);
       await supabase.from('accounts').delete().eq('id', acc.id).eq('tenant_id', tenantId);
       await supabase.from('sale_items').delete().eq('sale_id', creditSale.id).eq('tenant_id', tenantId);
-      await supabase.from('sales').delete().eq('id', creditSale.id).eq('tenant_id', tenantId);
+      await supabase.from('sales').delete().eq('id', creditSale.id).eq('tenant_id', tenantId).eq('tenant_id', tenantId);
       logger.error({ err: stockErr2 }, '[SALES credit] venta a crédito revertida por fallo al descontar stock');
       return res.status(409).json({ error: 'No se pudo completar la venta a crédito: el stock cambió. Reintentá.' });
     }
