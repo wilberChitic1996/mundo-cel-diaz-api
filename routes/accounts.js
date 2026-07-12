@@ -47,7 +47,11 @@ router.post('/', auth, requireRole('admin', 'cajero'), enforceSubscription, asyn
     if (existingAcc) return res.status(200).json(existingAcc);
   }
 
-  var accInsert = { client, total, paid:paid||0, balance:balance||total, status:status||'pendiente', method:method||'Efectivo', user_id:req.user.userId, registrado_por: registradoPor, tenant_id: tid(req) };
+  // Recalcular en el servidor (no confiar en paid/balance/status del cliente):
+  var _paid = Math.max(0, Math.min(Number(paid) || 0, Number(total) || 0));
+  var _bal  = Math.max(0, (Number(total) || 0) - _paid);
+  var _st   = _bal <= 0 ? 'pagado' : _paid > 0 ? 'parcial' : 'pendiente';
+  var accInsert = { client, total, paid:_paid, balance:_bal, status:_st, method:method||'Efectivo', user_id:req.user.userId, registrado_por: registradoPor, tenant_id: tid(req) };
   if (idempotencyKey) accInsert.idempotency_key = idempotencyKey;
 
   var { data: acc, error } = await supabase

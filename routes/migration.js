@@ -122,7 +122,7 @@ router.post('/debts', auth, requireRole('admin'), enforceSubscription, async (re
     } else {
       maxCli += 1;
       var nuevo = {
-        id: crypto.randomUUID(), cli_code: 'CLI-' + String(maxCli).padStart(3, '0'),
+        id: crypto.randomUUID(), cli_code: 'CLI-' + String(maxCli).padStart(6, '0'),
         name: rk.account.client, phone: rk.phone, nit: 'CF', active: true,
         created_at: new Date().toISOString(), tenant_id: tenantId,
       };
@@ -201,6 +201,14 @@ router.delete('/debts/:batchId', auth, requireRole('admin'), enforceSubscription
   if (!toDelete || !toDelete.length) return res.status(404).json({ error: 'No se encontró esa carga.' });
 
   var ids = toDelete.map(function(a) { return a.id; });
+  // Si alguna deuda del lote ya recibio abonos reales (que entraron a caja), deshacer
+  // borraria dinero ya cobrado -> bloquear. (La migracion no crea filas de pago.)
+  var { count: pagosReales } = await supabase.from('account_payments')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId).in('account_id', ids);
+  if (pagosReales > 0) {
+    return res.status(409).json({ error: 'No se puede deshacer esta carga: ya se cobraron abonos sobre estas deudas. Elimina o ajusta las cuentas una por una desde Cuentas.' });
+  }
   await rollbackBatch(tenantId, batchId, ids);
   await logAudit(req.user, 'migracion_revertida', 'migracion', batchId, { conteo: toDelete.length });
   res.json({ deleted: toDelete.length });
